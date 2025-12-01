@@ -1,6 +1,6 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { Layout } from './components/layout/Layout';
-import { Dashboard } from './pages/Dashboard';
+import Dashboard from './pages/Dashboard';
 import { Upload } from './pages/Upload';
 import { Submissions } from './pages/Submissions';
 import { Results } from './pages/Results';
