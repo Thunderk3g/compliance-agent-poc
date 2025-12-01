@@ -63,9 +63,9 @@ def seed_rules(db: Session):
     brand_rules = [
         Rule(
             category="brand",
-            rule_text="Use 'Bajaj Allianz' not abbreviations in customer-facing content",
+            rule_text="Use 'Bajaj Life Insurance' not abbreviations in customer-facing content",
             severity="medium",
-            keywords=["BALIC", "BA", "abbreviation"]
+            keywords=["BLIC", "BL", "abbreviation"]
         ),
         Rule(
             category="brand",

@@ -2,7 +2,7 @@
 
 ## Project Overview
 
-An AI-powered compliance verification system that automatically checks marketing content against IRDAI regulations and BALIC brand guidelines, providing real-time scoring, automated corrections, and comprehensive compliance dashboards.
+An AI-powered compliance verification system that automatically checks marketing content against IRDAI regulations and Bajaj Life Insurance brand guidelines, providing real-time scoring, automated corrections, and comprehensive compliance dashboards.
 
 ---
 
@@ -382,7 +382,7 @@ def calculate_compliance_score(violations):
 
 ```python
 COMPLIANCE_PROMPT = """
-You are a compliance expert for BALIC (Bajaj Allianz Life Insurance).
+You are a compliance expert for Bajaj Life Insurance.
 
 Analyze the following content for compliance violations:
 
@@ -673,7 +673,7 @@ async def analysis_websocket(websocket: WebSocket, submission_id: str):
 ### C. Glossary
 - **TAT**: Turnaround Time
 - **IRDAI**: Insurance Regulatory and Development Authority of India
-- **BALIC**: Bajaj Allianz Life Insurance Company
+- **BLIC**: Bajaj Life Insurance Company
 - **SEO**: Search Engine Optimization
 - **RAG**: Retrieval Augmented Generation
 

@@ -21,8 +21,20 @@ export const api = {
   getSubmission: (id: string) =>
     apiClient.get(`/api/submissions/${id}`),
 
+  getSubmissionById: (id: string) =>
+    apiClient.get(`/api/submissions/${id}`),
+
   analyzeSubmission: (id: string) =>
     apiClient.post(`/api/submissions/${id}/analyze`),
+
+  // PDF Modification
+  applyPdfFixes: (id: string) =>
+    apiClient.post(`/api/submissions/${id}/apply-fixes`),
+
+  downloadModifiedPdf: (id: string) =>
+    apiClient.get(`/api/submissions/${id}/download-modified`, {
+      responseType: 'blob'
+    }),
 
   // Compliance
   getComplianceResults: (submissionId: string) =>

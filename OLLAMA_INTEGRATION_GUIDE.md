@@ -1,6 +1,6 @@
 # Ollama Integration Guide - eTouch II Insurance Backend
 
-A comprehensive guide for building AI-powered applications with Ollama LLM integration, based on the Bajaj Allianz eTouch II Insurance Backend implementation.
+A comprehensive guide for building AI-powered applications with Ollama LLM integration, based on the Bajaj Life Insurance eTouch II Backend implementation.
 
 ## Table of Contents
 1. [Architecture Overview](#architecture-overview)
