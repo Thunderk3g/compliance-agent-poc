@@ -33,6 +33,22 @@ services:
       timeout: 5s
       retries: 5
 
+  # 👉 PgAdmin Service Added
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: compliance-pgadmin
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@local.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - compliance-network
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+
   ollama:
     image: ollama/ollama:latest
     container_name: compliance-ollama
@@ -42,7 +58,6 @@ services:
       - ollama_data:/root/.ollama
     networks:
       - compliance-network
-    # NVIDIA GPU support
     deploy:
       resources:
         reservations:
@@ -99,6 +114,7 @@ services:
 
 volumes:
   postgres_data:
+  pgadmin_data:
   ollama_data:
   uploads:
 

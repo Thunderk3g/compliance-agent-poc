@@ -39,7 +39,7 @@ Analyze the following content against these compliance rules:
       "auto_fixable": true/false
     }}
   ],
-  "overall_assessment": "Brief 1-2 sentence summary of compliance status",
+  "overall_assessment": "Brief 10 sentence summary of compliance status",
   "key_issues": ["issue 1", "issue 2", "issue 3"]
 }}
 
