@@ -123,3 +123,58 @@ async def analyze_submission(
 
     except Exception as e:
         raise HTTPException(500, f"Analysis failed: {str(e)}")
+
+
+@router.delete("/{submission_id}")
+def delete_submission(
+    submission_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """Delete a submission and its associated file."""
+    submission = db.query(Submission).filter(Submission.id == submission_id).first()
+
+    if not submission:
+        raise HTTPException(404, "Submission not found")
+
+    # Delete physical file if exists
+    if submission.file_path and os.path.exists(submission.file_path):
+        os.remove(submission.file_path)
+
+    db.delete(submission)
+    db.commit()
+
+    return {"message": "Submission deleted successfully"}
+
+
+@router.delete("")
+def delete_all_submissions(
+    db: Session = Depends(get_db)
+):
+    """Delete all submissions and their associated files."""
+    submissions = db.query(Submission).all()
+
+    deleted_count = 0
+    failed_files = []
+
+    for submission in submissions:
+        # Delete physical file if exists
+        if submission.file_path and os.path.exists(submission.file_path):
+            try:
+                os.remove(submission.file_path)
+            except Exception as e:
+                failed_files.append(submission.file_path)
+
+        db.delete(submission)
+        deleted_count += 1
+
+    db.commit()
+
+    message = f"Successfully deleted {deleted_count} submission(s)"
+    if failed_files:
+        message += f" (Failed to delete {len(failed_files)} file(s))"
+
+    return {
+        "message": message,
+        "deleted_count": deleted_count,
+        "failed_files": failed_files
+    }

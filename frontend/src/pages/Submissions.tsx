@@ -7,6 +7,8 @@ import { format } from 'date-fns';
 export const Submissions: React.FC = () => {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
+  const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+  const [deletingAll, setDeletingAll] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -25,6 +27,7 @@ export const Submissions: React.FC = () => {
   };
 
   const handleAnalyze = async (id: string) => {
+    setActionLoading(prev => ({...prev, [id]: true}));
     try {
       await api.analyzeSubmission(id);
       // Refresh submissions
@@ -34,6 +37,49 @@ export const Submissions: React.FC = () => {
     } catch (error) {
       console.error('Analysis failed:', error);
       alert('Analysis failed. Please try again.');
+    } finally {
+      setActionLoading(prev => ({...prev, [id]: false}));
+    }
+  };
+
+  const handleDelete = async (id: string) => {
+    if (!confirm('Are you sure you want to delete this submission? This action cannot be undone.')) {
+      return;
+    }
+    setActionLoading(prev => ({...prev, [id]: true}));
+    try {
+      await api.deleteSubmission(id);
+      // Refresh submissions
+      await fetchSubmissions();
+    } catch (error) {
+      console.error('Delete failed:', error);
+      alert('Failed to delete submission. Please try again.');
+    } finally {
+      setActionLoading(prev => ({...prev, [id]: false}));
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (submissions.length === 0) {
+      alert('No submissions to delete.');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to delete ALL ${submissions.length} submission(s)? This action cannot be undone and will permanently delete all submissions and their files.`)) {
+      return;
+    }
+
+    setDeletingAll(true);
+    try {
+      const response = await api.deleteAllSubmissions();
+      alert(response.data.message);
+      // Refresh submissions
+      await fetchSubmissions();
+    } catch (error) {
+      console.error('Delete all failed:', error);
+      alert('Failed to delete all submissions. Please try again.');
+    } finally {
+      setDeletingAll(false);
     }
   };
 
@@ -58,7 +104,22 @@ export const Submissions: React.FC = () => {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-3xl font-bold text-gray-900">Submissions</h2>
+      <div className="flex justify-between items-center">
+        <h2 className="text-3xl font-bold text-gray-900">Submissions</h2>
+        {submissions.length > 0 && (
+          <button
+            onClick={handleDeleteAll}
+            disabled={deletingAll}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+              deletingAll
+                ? 'bg-red-400 text-white cursor-not-allowed'
+                : 'bg-red-600 text-white hover:bg-red-700'
+            }`}
+          >
+            {deletingAll ? 'Deleting All...' : 'Delete All Submissions'}
+          </button>
+        )}
+      </div>
 
       <div className="bg-white rounded-lg border overflow-hidden">
         <table className="w-full">
@@ -100,9 +161,10 @@ export const Submissions: React.FC = () => {
                   {submission.status === 'pending' && (
                     <button
                       onClick={() => handleAnalyze(submission.id)}
-                      className="text-blue-600 hover:text-blue-800 font-medium"
+                      disabled={actionLoading[submission.id]}
+                      className={`font-medium ${actionLoading[submission.id] ? 'text-blue-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-800'}`}
                     >
-                      Analyze
+                      {actionLoading[submission.id] ? 'Analyzing...' : 'Analyze'}
                     </button>
                   )}
                   {submission.status === 'completed' && (
@@ -113,6 +175,13 @@ export const Submissions: React.FC = () => {
                       View Results
                     </button>
                   )}
+                  <button
+                    onClick={() => handleDelete(submission.id)}
+                    disabled={actionLoading[submission.id]}
+                    className={`font-medium ml-4 ${actionLoading[submission.id] ? 'text-red-400 cursor-not-allowed' : 'text-red-600 hover:text-red-800'}`}
+                  >
+                    {actionLoading[submission.id] ? 'Deleting...' : 'Delete'}
+                  </button>
                 </td>
               </tr>
             ))}

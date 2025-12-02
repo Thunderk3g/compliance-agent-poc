@@ -27,6 +27,12 @@ export const api = {
   analyzeSubmission: (id: string) =>
     apiClient.post(`/api/submissions/${id}/analyze`),
 
+  deleteSubmission: (id: string) =>
+    apiClient.delete(`/api/submissions/${id}`),
+
+  deleteAllSubmissions: () =>
+    apiClient.delete('/api/submissions'),
+
   // PDF Modification
   applyPdfFixes: (id: string) =>
     apiClient.post(`/api/submissions/${id}/apply-fixes`),

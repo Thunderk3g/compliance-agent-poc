@@ -9,10 +9,10 @@ class ScoringService:
 
     # Severity weights (points deducted)
     WEIGHTS = {
-        "critical": 20,
-        "high": 10,
-        "medium": 5,
-        "low": 2
+        "critical": 20,  # Regulatory/safety critical
+        "high": 10,      # Product accuracy
+        "medium": 3,     # Style/branding (reduced from 5 to 3)
+        "low": 2         # Minor issues
     }
 
     # Category weights for overall score
