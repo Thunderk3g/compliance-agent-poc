@@ -6,9 +6,6 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql://compliance_user:compliance_pass@localhost:5432/compliance_db"
 
-    # Redis
-    redis_url: str = "redis://localhost:6379/0"
-
     # Ollama
     ollama_base_url: str = "http://127.0.0.1:11434"
     ollama_model: str = "qwen2.5:7b"

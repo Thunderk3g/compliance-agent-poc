@@ -5,10 +5,7 @@ uvicorn[standard]==0.24.0
 # Database
 sqlalchemy==2.0.23
 alembic==1.13.0
-psycopg2-binary==2.9.9
-
-# Redis
-redis==5.0.1
+psycopg2-binary==2.9.10
 
 # Ollama Integration
 httpx==0.25.2
@@ -23,11 +20,4 @@ PyPDF2==3.0.1
 python-docx==1.1.0
 beautifulsoup4==4.12.2
 markdown==3.5.1
-pdfplumber==0.10.3
 
-# Utilities
-python-dotenv==1.0.0
-
-# Testing
-pytest==7.4.3
-pytest-asyncio==0.21.1
