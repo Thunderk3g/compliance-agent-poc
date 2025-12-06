@@ -139,3 +139,54 @@ export interface RuleBulkSubmitResponse {
   created_rule_ids: string[];
   errors: string[];
 }
+
+// Deep Compliance Research Mode Types
+export interface SeverityWeights {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface RuleImpact {
+  rule_id: string;
+  rule_text: string;
+  category: string;
+  severity: string;
+  base_deduction: number;
+  weight_multiplier: number;
+  weighted_deduction: number;
+  violation_reason: string;
+}
+
+export interface LineAnalysis {
+  id: string;
+  line_number: number;
+  line_content: string;
+  line_score: number;
+  relevance_context: string;
+  rule_impacts: RuleImpact[];
+}
+
+export interface DeepAnalysisRequest {
+  severity_weights: SeverityWeights;
+}
+
+export interface DeepAnalysisResponse {
+  check_id: string;
+  submission_id: string;
+  document_title: string;
+  total_lines: number;
+  average_score: number;
+  min_score: number;
+  max_score: number;
+  severity_config: SeverityWeights;
+  lines: LineAnalysis[];
+  analysis_timestamp: string;
+}
+
+export const SEVERITY_PRESETS = {
+  strict: { critical: 2.0, high: 1.5, medium: 1.0, low: 0.5 },
+  balanced: { critical: 1.5, high: 1.0, medium: 0.5, low: 0.2 },
+  lenient: { critical: 1.0, high: 0.5, medium: 0.2, low: 0.1 },
+};

@@ -162,6 +162,63 @@ class OllamaService:
             "key_issues": ["AI service unavailable"]
         })
 
+    async def analyze_line_for_violations(
+        self,
+        line_content: str,
+        line_number: int,
+        document_context: str,
+        rules: List[Dict]
+    ) -> Dict[str, Any]:
+        """
+        Analyze a single line for compliance violations.
+        
+        Used by Deep Compliance Research Mode.
+        LLM role is LIMITED to violation detection and context generation.
+        Score calculation is handled by deterministic Python code.
+        
+        Args:
+            line_content: The text of the line to analyze
+            line_number: Position in document
+            document_context: Document title for context
+            rules: List of rule dicts with id, category, rule_text, severity, keywords
+        
+        Returns:
+            dict with 'relevance_context' and 'violations' list
+        """
+        from .prompts.deep_analysis_prompt import (
+            build_deep_analysis_prompt,
+            parse_line_analysis_response
+        )
+        
+        # Build prompts
+        prompts = build_deep_analysis_prompt(
+            line_content=line_content,
+            line_number=line_number,
+            document_title=document_context,
+            rules=rules
+        )
+        
+        try:
+            # Call LLM
+            response_text = await self.generate_response(
+                prompt=prompts["user_prompt"],
+                system_prompt=prompts["system_prompt"]
+            )
+            
+            # Parse response
+            result = parse_line_analysis_response(response_text)
+            
+            logger.debug(f"Line {line_number} analysis: {len(result.get('violations', []))} violations found")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"Error analyzing line {line_number}: {str(e)}")
+            return {
+                "relevance_context": "Error during analysis",
+                "violations": []
+            }
+
     async def __aenter__(self):
         return self
 

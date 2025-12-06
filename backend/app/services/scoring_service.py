@@ -139,11 +139,19 @@ class ScoringService:
 
         Phase 2 Update: Now uses the 'points_deduction' field from violations
         instead of looking up severity weights.
+        
+        Handles combined categories like "irdai|brand" by checking if the 
+        target category is contained in the violation's category string.
         """
         base_score = 100.0
 
-        # Filter violations for this category
-        category_violations = [v for v in violations if v.get("category") == category]
+        # Filter violations for this category (handles | separated categories)
+        category_violations = []
+        for v in violations:
+            v_category = v.get("category", "")
+            # Check if category matches exactly or is part of a combined category
+            if category == v_category or category in v_category.split("|"):
+                category_violations.append(v)
 
         # Deduct points using DB-stored values
         for violation in category_violations:

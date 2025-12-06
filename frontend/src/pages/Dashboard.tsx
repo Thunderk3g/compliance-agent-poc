@@ -28,12 +28,16 @@ export default function Dashboard() {
   }, []);
 
   if (loading) {
-    return <div className="text-center py-12">Loading...</div>;
+    return (
+      <div className="flex items-center justify-center py-12">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
+      </div>
+    );
   }
 
-  // Calculate overall score from stats or use default (92 for premium demo)
-  const overallScore = 92; // Premium score for demo
-  const grade = "A";
+  // Use real data from API - fallback to 0 if no data
+  const overallScore = stats?.avg_compliance_score || 0;
+  const grade = overallScore >= 90 ? 'A' : overallScore >= 80 ? 'B' : overallScore >= 70 ? 'C' : overallScore >= 60 ? 'D' : 'F';
 
   // 1. HERO GAUGE – This alone wins the demo with emerald/teal gradient
   const heroGaugeOption = {
@@ -157,11 +161,12 @@ export default function Dashboard() {
     title: { text: "Violations by Category & Severity", align: "center" },
   };
 
-  // 4. Donut
-  const totalSubmissions = stats?.total_submissions || 437;
-  const passedCount = Math.round(totalSubmissions * 0.714); // ~71.4%
-  const flaggedCount = Math.round(totalSubmissions * 0.215); // ~21.5%
-  const failedCount = totalSubmissions - passedCount - flaggedCount;
+  // 4. Donut - Use real data from stats
+  const totalSubmissions = stats?.total_submissions || 0;
+  const flaggedCount = stats?.flagged_count || 0;
+  const pendingCount = stats?.pending_count || 0;
+  const passedCount = Math.max(0, totalSubmissions - flaggedCount - pendingCount);
+  const failedCount = pendingCount; // Using pending as "needs review"
 
   const donutOptions: ApexOptions = {
     series: [passedCount, flaggedCount, failedCount],
@@ -321,7 +326,7 @@ export default function Dashboard() {
           {[
             {
               label: "Total Submissions",
-              value: String(stats?.total_submissions || 437),
+              value: String(stats?.total_submissions || 0),
               color: "bg-blue-500",
             },
             {
@@ -330,11 +335,15 @@ export default function Dashboard() {
               color: "bg-green-500",
             },
             {
-              label: "Flagged Today",
-              value: String(stats?.flagged_count || 11),
+              label: "Flagged",
+              value: String(stats?.flagged_count || 0),
               color: "bg-amber-500",
             },
-            { label: "Critical Violations", value: "20", color: "bg-red-500" },
+            {
+              label: "Pending Review",
+              value: String(stats?.pending_count || 0),
+              color: "bg-red-500"
+            },
           ].map((stat) => (
             <Card key={stat.label}>
               <CardContent className="p-6 text-center">

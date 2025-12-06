@@ -14,6 +14,7 @@ import ViolationDistributionCharts from '../components/results/analytics/Violati
 import SeverityHeatmap from '../components/results/analytics/SeverityHeatmap';
 import AutoFixabilityAnalysis from '../components/results/analytics/AutoFixabilityAnalysis';
 import PDFModificationPanel from '../components/results/PDFModificationPanel';
+import { DeepAnalysisPanel } from '../components/compliance';
 
 export const Results: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -21,6 +22,7 @@ export const Results: React.FC = () => {
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [showDeepAnalysis, setShowDeepAnalysis] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -48,8 +50,8 @@ export const Results: React.FC = () => {
       console.error('Failed to fetch results:', error);
       setError(
         error.response?.data?.detail ||
-          error.message ||
-          'Failed to load compliance results'
+        error.message ||
+        'Failed to load compliance results'
       );
     } finally {
       setLoading(false);
@@ -195,6 +197,30 @@ export const Results: React.FC = () => {
           contentType={submission.content_type}
           violationsCount={results.violations.length}
           onFixesApplied={fetchResults}
+        />
+      )}
+
+      {/* Deep Analysis Toggle Button */}
+      <div className="flex justify-center">
+        <button
+          onClick={() => setShowDeepAnalysis(!showDeepAnalysis)}
+          className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all ${showDeepAnalysis
+              ? 'bg-purple-100 text-purple-700 border-2 border-purple-300'
+              : 'bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 shadow-lg hover:shadow-xl'
+            }`}
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+          </svg>
+          {showDeepAnalysis ? 'Hide Deep Analysis' : 'Deep Compliance Research Mode'}
+        </button>
+      </div>
+
+      {/* Deep Analysis Panel */}
+      {showDeepAnalysis && id && (
+        <DeepAnalysisPanel
+          submissionId={id}
+          onClose={() => setShowDeepAnalysis(false)}
         />
       )}
 

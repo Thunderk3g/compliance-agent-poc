@@ -145,4 +145,21 @@ export const api = {
     apiClient.post('/api/admin/rules/bulk-submit', data, {
       headers: { 'X-User-Id': userId },
     }),
+
+  // Deep Compliance Research Mode
+  triggerDeepAnalysis: (submissionId: string, severityWeights: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  }) =>
+    apiClient.post(`/api/compliance/${submissionId}/deep-analyze`, {
+      severity_weights: severityWeights
+    }),
+
+  getDeepAnalysisResults: (submissionId: string) =>
+    apiClient.get(`/api/compliance/${submissionId}/deep-results`),
+
+  getDeepAnalysisPresets: (submissionId: string) =>
+    apiClient.get(`/api/compliance/${submissionId}/deep-analyze/presets`),
 };
