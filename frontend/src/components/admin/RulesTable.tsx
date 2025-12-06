@@ -6,7 +6,9 @@ interface RulesTableProps {
   rules: Rule[];
   loading: boolean;
   onEdit: (rule: Rule) => void;
-  onDelete: (ruleId: string) => void;
+  onDelete?: (ruleId: string) => void;
+  onRestore?: (ruleId: string) => void;
+  showRestoreButton?: boolean;
 }
 
 export const RulesTable: React.FC<RulesTableProps> = ({
@@ -14,6 +16,8 @@ export const RulesTable: React.FC<RulesTableProps> = ({
   loading,
   onEdit,
   onDelete,
+  onRestore,
+  showRestoreButton = false,
 }) => {
   const getSeverityColor = (severity: string) => {
     switch (severity) {
@@ -55,7 +59,9 @@ export const RulesTable: React.FC<RulesTableProps> = ({
     return (
       <div className="bg-white rounded-lg border overflow-hidden">
         <div className="text-center py-12 text-gray-500">
-          No rules found. Try adjusting your filters or upload a document to generate rules.
+          {showRestoreButton
+            ? 'No deactivated rules found.'
+            : 'No rules found. Try adjusting your filters or upload a document to generate rules.'}
         </div>
       </div>
     );
@@ -130,12 +136,21 @@ export const RulesTable: React.FC<RulesTableProps> = ({
                   >
                     Edit
                   </button>
-                  <button
-                    onClick={() => onDelete(rule.id)}
-                    className="text-red-600 hover:text-red-800 font-medium ml-4"
-                  >
-                    Delete
-                  </button>
+                  {showRestoreButton && onRestore ? (
+                    <button
+                      onClick={() => onRestore(rule.id)}
+                      className="text-green-600 hover:text-green-800 font-medium ml-4"
+                    >
+                      Restore
+                    </button>
+                  ) : onDelete ? (
+                    <button
+                      onClick={() => onDelete(rule.id)}
+                      className="text-red-600 hover:text-red-800 font-medium ml-4"
+                    >
+                      Deactivate
+                    </button>
+                  ) : null}
                 </td>
               </tr>
             ))}

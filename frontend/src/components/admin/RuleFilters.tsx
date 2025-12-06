@@ -9,6 +9,7 @@ interface RuleFiltersProps {
   onSeverityChange: (value: string) => void;
   onActiveChange: (value: boolean | undefined) => void;
   onSearchChange: (value: string) => void;
+  hideActiveFilter?: boolean; // Optional prop to hide status filter when tabs handle this
 }
 
 export const RuleFilters: React.FC<RuleFiltersProps> = ({
@@ -20,11 +21,12 @@ export const RuleFilters: React.FC<RuleFiltersProps> = ({
   onSeverityChange,
   onActiveChange,
   onSearchChange,
+  hideActiveFilter = false,
 }) => {
   return (
     <div className="bg-white rounded-lg border p-6">
       <h2 className="text-lg font-semibold text-gray-900 mb-4">Filter Rules</h2>
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+      <div className={`grid grid-cols-1 gap-4 ${hideActiveFilter ? 'md:grid-cols-3' : 'md:grid-cols-4'}`}>
         {/* Category Filter */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -60,25 +62,27 @@ export const RuleFilters: React.FC<RuleFiltersProps> = ({
           </select>
         </div>
 
-        {/* Status Filter */}
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-2">
-            Status
-          </label>
-          <select
-            value={activeFilter === undefined ? '' : activeFilter ? 'true' : 'false'}
-            onChange={(e) =>
-              onActiveChange(
-                e.target.value === '' ? undefined : e.target.value === 'true'
-              )
-            }
-            className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          >
-            <option value="">All Status</option>
-            <option value="true">Active</option>
-            <option value="false">Inactive</option>
-          </select>
-        </div>
+        {/* Status Filter - Hidden when tabs handle this */}
+        {!hideActiveFilter && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Status
+            </label>
+            <select
+              value={activeFilter === undefined ? '' : activeFilter ? 'true' : 'false'}
+              onChange={(e) =>
+                onActiveChange(
+                  e.target.value === '' ? undefined : e.target.value === 'true'
+                )
+              }
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            >
+              <option value="">All Status</option>
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+          </div>
+        )}
 
         {/* Search */}
         <div>
