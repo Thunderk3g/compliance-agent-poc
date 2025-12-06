@@ -54,6 +54,15 @@ export const api = {
 
   getRecentSubmissions: () => apiClient.get('/api/dashboard/recent'),
 
+  getDashboardTrends: (days: number = 30) =>
+    apiClient.get('/api/dashboard/trends', { params: { days } }),
+
+  getViolationsHeatmap: () =>
+    apiClient.get('/api/dashboard/violations-heatmap'),
+
+  getTopViolations: (limit: number = 5) =>
+    apiClient.get('/api/dashboard/top-violations', { params: { limit } }),
+
   // Phase 2: Admin - Rule Management
   generateRulesFromDocument: (file: File, documentTitle: string, userId: string) => {
     const formData = new FormData();
@@ -162,4 +171,12 @@ export const api = {
 
   getDeepAnalysisPresets: (submissionId: string) =>
     apiClient.get(`/api/compliance/${submissionId}/deep-analyze/presets`),
+
+  downloadDeepAnalysisReport: (submissionId: string) =>
+    apiClient.get(`/api/compliance/${submissionId}/deep-analysis/export`, {
+      responseType: 'blob'
+    }),
+
+  syncDeepAnalysisResults: (submissionId: string) =>
+    apiClient.post(`/api/compliance/${submissionId}/deep-analysis/sync`),
 };

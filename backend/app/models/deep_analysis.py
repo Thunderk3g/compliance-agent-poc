@@ -48,6 +48,10 @@ class DeepAnalysis(Base):
     # Governance snapshot: exact weights used for this analysis run
     # Format: {"critical": 1.5, "high": 1.0, "medium": 0.5, "low": 0.2}
     severity_config_snapshot = Column(JSONB, nullable=False)
+
+    # Analysis Status: pending, processing, completed, failed
+    status = Column(Text, default='pending', server_default='pending')
+
     
     # Complete analysis data as JSON array
     # Format: [{
@@ -76,9 +80,11 @@ class DeepAnalysis(Base):
             "document_title": self.document_title or "",
             "total_lines": int(self.total_lines) if self.total_lines else 0,
             "average_score": float(self.average_score) if self.average_score else 100.0,
+            "average_score": float(self.average_score) if self.average_score else 100.0,
             "min_score": float(self.min_score) if self.min_score else 100.0,
             "max_score": float(self.max_score) if self.max_score else 100.0,
             "severity_config": self.severity_config_snapshot or {},
+            "status": self.status or "completed",
             "lines": self.analysis_data or [],
             "analysis_timestamp": self.created_at.isoformat() if self.created_at else None
         }

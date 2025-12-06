@@ -22,7 +22,7 @@ export const Results: React.FC = () => {
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [showDeepAnalysis, setShowDeepAnalysis] = useState(false);
+  const [activeTab, setActiveTab] = useState<'overview' | 'violations' | 'deep-research'>('overview');
 
   useEffect(() => {
     if (id) {
@@ -200,310 +200,416 @@ export const Results: React.FC = () => {
         />
       )}
 
-      {/* Deep Analysis Toggle Button */}
-      <div className="flex justify-center">
-        <button
-          onClick={() => setShowDeepAnalysis(!showDeepAnalysis)}
-          className={`flex items-center gap-2 px-6 py-3 rounded-xl font-semibold transition-all ${showDeepAnalysis
-              ? 'bg-purple-100 text-purple-700 border-2 border-purple-300'
-              : 'bg-gradient-to-r from-purple-600 to-blue-600 text-white hover:from-purple-700 hover:to-blue-700 shadow-lg hover:shadow-xl'
-            }`}
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-          </svg>
-          {showDeepAnalysis ? 'Hide Deep Analysis' : 'Deep Compliance Research Mode'}
-        </button>
+      {/* Tab Navigation */}
+      <div className="border-b border-gray-200">
+        <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+          <button
+            onClick={() => setActiveTab('overview')}
+            className={`${activeTab === 'overview'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+            </svg>
+            Overview
+          </button>
+
+          <button
+            onClick={() => setActiveTab('violations')}
+            className={`${activeTab === 'violations'
+              ? 'border-red-500 text-red-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            Detailed Violations
+            <span className="bg-gray-100 text-gray-600 py-0.5 px-2.5 rounded-full text-xs ml-2">
+              {results.violations.length}
+            </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('deep-research')}
+            className={`${activeTab === 'deep-research'
+              ? 'border-purple-500 text-purple-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm flex items-center gap-2`}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+            </svg>
+            Deep Research
+            {results.has_deep_analysis && (
+              <span className="flex h-2 w-2 relative">
+                <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-purple-400 opacity-75"></span>
+                <span className="relative inline-flex rounded-full h-2 w-2 bg-purple-500"></span>
+              </span>
+            )}
+          </button>
+        </nav>
       </div>
 
-      {/* Deep Analysis Panel */}
-      {showDeepAnalysis && id && (
-        <DeepAnalysisPanel
-          submissionId={id}
-          onClose={() => setShowDeepAnalysis(false)}
-        />
+      {/* Tab Content: Overview */}
+      {activeTab === 'overview' && (
+        <div className="space-y-8 animate-fade-in">
+          {/* Executive Summary - Enhanced Score Cards */}
+          <div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">
+              Executive Summary
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Overall Score */}
+              <div className="bg-white rounded-lg border-2 border-gray-300 p-6 shadow-sm hover:shadow-md transition-shadow">
+                <div className="text-sm font-medium text-gray-600 mb-2">
+                  Overall Score
+                </div>
+                <div
+                  className={`text-4xl font-bold ${getScoreColor(
+                    results.overall_score
+                  )} mb-2`}
+                >
+                  {results.overall_score.toFixed(1)}%
+                </div>
+                <div className="mb-3">
+                  <span className="px-3 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-800">
+                    Grade: {results.grade}
+                  </span>
+                </div>
+                <div className="bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    className={`h-3 rounded-full transition-all duration-500 ${getScoreColor(
+                      results.overall_score
+                    ).replace('text-', 'bg-')}`}
+                    style={{ width: `${results.overall_score}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* IRDAI Score */}
+              <div className="bg-white rounded-lg border border-blue-200 p-6 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-blue-500"></div>
+                  <div className="text-sm font-medium text-gray-600">
+                    IRDAI Compliance
+                  </div>
+                </div>
+                <div
+                  className={`text-4xl font-bold ${getScoreColor(
+                    results.irdai_score
+                  )} mb-2`}
+                >
+                  {results.irdai_score.toFixed(1)}%
+                </div>
+                <div className="text-xs text-gray-600 mb-3">50% weight</div>
+                <div className="bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    className={`h-3 rounded-full transition-all duration-500 ${getScoreColor(
+                      results.irdai_score
+                    ).replace('text-', 'bg-')}`}
+                    style={{ width: `${results.irdai_score}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* Brand Score */}
+              <div className="bg-white rounded-lg border border-violet-200 p-6 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-violet-500"></div>
+                  <div className="text-sm font-medium text-gray-600">
+                    Brand Guidelines
+                  </div>
+                </div>
+                <div
+                  className={`text-4xl font-bold ${getScoreColor(
+                    results.brand_score
+                  )} mb-2`}
+                >
+                  {results.brand_score.toFixed(1)}%
+                </div>
+                <div className="text-xs text-gray-600 mb-3">30% weight</div>
+                <div className="bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    className={`h-3 rounded-full transition-all duration-500 ${getScoreColor(
+                      results.brand_score
+                    ).replace('text-', 'bg-')}`}
+                    style={{ width: `${results.brand_score}%` }}
+                  />
+                </div>
+              </div>
+
+              {/* SEO Score */}
+              <div className="bg-white rounded-lg border border-cyan-200 p-6 shadow-sm hover:shadow-md transition-shadow">
+                <div className="flex items-center space-x-2 mb-2">
+                  <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
+                  <div className="text-sm font-medium text-gray-600">SEO Health</div>
+                </div>
+                <div
+                  className={`text-4xl font-bold ${getScoreColor(
+                    results.seo_score
+                  )} mb-2`}
+                >
+                  {results.seo_score.toFixed(1)}%
+                </div>
+                <div className="text-xs text-gray-600 mb-3">20% weight</div>
+                <div className="bg-gray-200 rounded-full h-3 overflow-hidden">
+                  <div
+                    className={`h-3 rounded-full transition-all duration-500 ${getScoreColor(
+                      results.seo_score
+                    ).replace('text-', 'bg-')}`}
+                    style={{ width: `${results.seo_score}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Analytics Dashboard */}
+          <div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">
+              Detailed Analytics
+            </h3>
+
+            {/* Top Row: Score Comparison & Violation Distribution */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              <ScoreComparisonRadar results={results} height={400} />
+              <ViolationDistributionCharts
+                violations={results.violations}
+                height={350}
+              />
+            </div>
+
+            {/* Bottom Row: Heatmap & Auto-Fixability */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+              <SeverityHeatmap violations={results.violations} height={350} />
+              <AutoFixabilityAnalysis violations={results.violations} height={350} />
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* Executive Summary - Enhanced Score Cards */}
-      <div>
-        <h3 className="text-xl font-semibold text-gray-900 mb-4">
-          Executive Summary
-        </h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-          {/* Overall Score */}
-          <div className="bg-white rounded-lg border-2 border-gray-300 p-6 shadow-sm hover:shadow-md transition-shadow">
-            <div className="text-sm font-medium text-gray-600 mb-2">
-              Overall Score
-            </div>
-            <div
-              className={`text-4xl font-bold ${getScoreColor(
-                results.overall_score
-              )} mb-2`}
-            >
-              {results.overall_score.toFixed(1)}%
-            </div>
-            <div className="mb-3">
-              <span className="px-3 py-1 text-xs font-bold rounded-full bg-gray-100 text-gray-800">
-                Grade: {results.grade}
-              </span>
-            </div>
-            <div className="bg-gray-200 rounded-full h-3 overflow-hidden">
-              <div
-                className={`h-3 rounded-full transition-all duration-500 ${getScoreColor(
-                  results.overall_score
-                ).replace('text-', 'bg-')}`}
-                style={{ width: `${results.overall_score}%` }}
-              />
-            </div>
-          </div>
+      {/* Tab Content: Violations */}
+      {activeTab === 'violations' && (
+        <div className="animate-fade-in">
 
-          {/* IRDAI Score */}
-          <div className="bg-white rounded-lg border border-blue-200 p-6 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center space-x-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-blue-500"></div>
-              <div className="text-sm font-medium text-gray-600">
-                IRDAI Compliance
-              </div>
-            </div>
-            <div
-              className={`text-4xl font-bold ${getScoreColor(
-                results.irdai_score
-              )} mb-2`}
-            >
-              {results.irdai_score.toFixed(1)}%
-            </div>
-            <div className="text-xs text-gray-600 mb-3">50% weight</div>
-            <div className="bg-gray-200 rounded-full h-3 overflow-hidden">
-              <div
-                className={`h-3 rounded-full transition-all duration-500 ${getScoreColor(
-                  results.irdai_score
-                ).replace('text-', 'bg-')}`}
-                style={{ width: `${results.irdai_score}%` }}
-              />
-            </div>
-          </div>
 
-          {/* Brand Score */}
-          <div className="bg-white rounded-lg border border-violet-200 p-6 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center space-x-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-violet-500"></div>
-              <div className="text-sm font-medium text-gray-600">
-                Brand Guidelines
-              </div>
-            </div>
-            <div
-              className={`text-4xl font-bold ${getScoreColor(
-                results.brand_score
-              )} mb-2`}
-            >
-              {results.brand_score.toFixed(1)}%
-            </div>
-            <div className="text-xs text-gray-600 mb-3">30% weight</div>
-            <div className="bg-gray-200 rounded-full h-3 overflow-hidden">
-              <div
-                className={`h-3 rounded-full transition-all duration-500 ${getScoreColor(
-                  results.brand_score
-                ).replace('text-', 'bg-')}`}
-                style={{ width: `${results.brand_score}%` }}
-              />
-            </div>
-          </div>
+          {/* Violations List */}
+          <div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">
+              Detailed Violations ({results.violations.length})
+            </h3>
 
-          {/* SEO Score */}
-          <div className="bg-white rounded-lg border border-cyan-200 p-6 shadow-sm hover:shadow-md transition-shadow">
-            <div className="flex items-center space-x-2 mb-2">
-              <div className="w-2 h-2 rounded-full bg-cyan-500"></div>
-              <div className="text-sm font-medium text-gray-600">SEO Health</div>
-            </div>
-            <div
-              className={`text-4xl font-bold ${getScoreColor(
-                results.seo_score
-              )} mb-2`}
-            >
-              {results.seo_score.toFixed(1)}%
-            </div>
-            <div className="text-xs text-gray-600 mb-3">20% weight</div>
-            <div className="bg-gray-200 rounded-full h-3 overflow-hidden">
-              <div
-                className={`h-3 rounded-full transition-all duration-500 ${getScoreColor(
-                  results.seo_score
-                ).replace('text-', 'bg-')}`}
-                style={{ width: `${results.seo_score}%` }}
-              />
-            </div>
-          </div>
-        </div>
-      </div>
+            <div className="bg-white rounded-lg border p-6">
+              {results.violations.length > 0 ? (
+                <div className="space-y-4">
+                  {results.violations.map((violation, index) => (
+                    <div
+                      key={violation.id}
+                      className={`border rounded-lg p-5 ${getSeverityColor(
+                        violation.severity
+                      )} hover:shadow-md transition-shadow`}
+                    >
+                      {/* Header */}
+                      <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-bold text-gray-700">
+                            #{index + 1}
+                          </span>
+                          <span className="px-3 py-1 text-xs font-bold rounded-full bg-white shadow-sm">
+                            {violation.severity.toUpperCase()}
+                          </span>
+                          <span className="px-3 py-1 text-xs font-medium rounded-full bg-white shadow-sm">
+                            {violation.category.toUpperCase()}
+                          </span>
+                        </div>
+                        {violation.is_auto_fixable && (
+                          <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-800">
+                            <svg
+                              className="w-3 h-3 mr-1"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M5 13l4 4L19 7"
+                              />
+                            </svg>
+                            Auto-Fixable
+                          </span>
+                        )}
+                      </div>
 
-      {/* Analytics Dashboard */}
-      <div>
-        <h3 className="text-xl font-semibold text-gray-900 mb-4">
-          Detailed Analytics
-        </h3>
+                      {/* Description */}
+                      <p className="font-semibold text-gray-900 mb-3 text-base">
+                        {violation.description}
+                      </p>
 
-        {/* Top Row: Score Comparison & Violation Distribution */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          <ScoreComparisonRadar results={results} height={400} />
-          <ViolationDistributionCharts
-            violations={results.violations}
-            height={350}
-          />
-        </div>
+                      {/* Location */}
+                      {violation.location && (
+                        <div className="mb-3 flex items-start space-x-2">
+                          <svg
+                            className="w-4 h-4 text-gray-600 mt-0.5 flex-shrink-0"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                            />
+                            <path
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                              strokeWidth={2}
+                              d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                            />
+                          </svg>
+                          <p className="text-sm text-gray-700">
+                            <span className="font-medium">Location:</span>{' '}
+                            {violation.location}
+                          </p>
+                        </div>
+                      )}
 
-        {/* Bottom Row: Heatmap & Auto-Fixability */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <SeverityHeatmap violations={results.violations} height={350} />
-          <AutoFixabilityAnalysis violations={results.violations} height={350} />
-        </div>
-      </div>
+                      {/* Current Text */}
+                      {violation.current_text && (
+                        <div className="bg-white/70 p-3 rounded-lg mb-3 border border-gray-300">
+                          <p className="text-xs font-semibold text-gray-700 mb-1 uppercase tracking-wide">
+                            Current Text:
+                          </p>
+                          <p className="text-sm text-gray-900 leading-relaxed">
+                            {violation.current_text}
+                          </p>
+                        </div>
+                      )}
 
-      {/* Violations List */}
-      <div>
-        <h3 className="text-xl font-semibold text-gray-900 mb-4">
-          Detailed Violations ({results.violations.length})
-        </h3>
-
-        <div className="bg-white rounded-lg border p-6">
-          {results.violations.length > 0 ? (
-            <div className="space-y-4">
-              {results.violations.map((violation, index) => (
-                <div
-                  key={violation.id}
-                  className={`border rounded-lg p-5 ${getSeverityColor(
-                    violation.severity
-                  )} hover:shadow-md transition-shadow`}
-                >
-                  {/* Header */}
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-bold text-gray-700">
-                        #{index + 1}
-                      </span>
-                      <span className="px-3 py-1 text-xs font-bold rounded-full bg-white shadow-sm">
-                        {violation.severity.toUpperCase()}
-                      </span>
-                      <span className="px-3 py-1 text-xs font-medium rounded-full bg-white shadow-sm">
-                        {violation.category.toUpperCase()}
-                      </span>
+                      {/* Suggested Fix */}
+                      {violation.suggested_fix && (
+                        <div className="bg-white/90 p-3 rounded-lg border-2 border-green-300">
+                          <p className="text-xs font-semibold text-green-800 mb-1 uppercase tracking-wide flex items-center">
+                            <svg
+                              className="w-4 h-4 mr-1"
+                              fill="none"
+                              stroke="currentColor"
+                              viewBox="0 0 24 24"
+                            >
+                              <path
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                strokeWidth={2}
+                                d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                              />
+                            </svg>
+                            Suggested Fix:
+                          </p>
+                          <p className="text-sm text-gray-900 leading-relaxed font-medium">
+                            {violation.suggested_fix}
+                          </p>
+                        </div>
+                      )}
                     </div>
-                    {violation.is_auto_fixable && (
-                      <span className="inline-flex items-center px-2 py-1 rounded-md text-xs font-medium bg-green-100 text-green-800">
-                        <svg
-                          className="w-3 h-3 mr-1"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M5 13l4 4L19 7"
-                          />
-                        </svg>
-                        Auto-Fixable
-                      </span>
-                    )}
-                  </div>
 
-                  {/* Description */}
-                  <p className="font-semibold text-gray-900 mb-3 text-base">
-                    {violation.description}
-                  </p>
-
-                  {/* Location */}
-                  {violation.location && (
-                    <div className="mb-3 flex items-start space-x-2">
-                      <svg
-                        className="w-4 h-4 text-gray-600 mt-0.5 flex-shrink-0"
-                        fill="none"
-                        stroke="currentColor"
-                        viewBox="0 0 24 24"
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                        />
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          strokeWidth={2}
-                          d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                        />
-                      </svg>
-                      <p className="text-sm text-gray-700">
-                        <span className="font-medium">Location:</span>{' '}
-                        {violation.location}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Current Text */}
-                  {violation.current_text && (
-                    <div className="bg-white/70 p-3 rounded-lg mb-3 border border-gray-300">
-                      <p className="text-xs font-semibold text-gray-700 mb-1 uppercase tracking-wide">
-                        Current Text:
-                      </p>
-                      <p className="text-sm text-gray-900 leading-relaxed">
-                        {violation.current_text}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* Suggested Fix */}
-                  {violation.suggested_fix && (
-                    <div className="bg-white/90 p-3 rounded-lg border-2 border-green-300">
-                      <p className="text-xs font-semibold text-green-800 mb-1 uppercase tracking-wide flex items-center">
-                        <svg
-                          className="w-4 h-4 mr-1"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                        Suggested Fix:
-                      </p>
-                      <p className="text-sm text-gray-900 leading-relaxed font-medium">
-                        {violation.suggested_fix}
-                      </p>
-                    </div>
-                  )}
+                  ))}
                 </div>
-              ))}
+              ) : (
+                <div className="text-center py-12">
+                  <svg
+                    className="w-20 h-20 text-green-500 mx-auto mb-4"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  <h4 className="text-xl font-semibold text-gray-900 mb-2">
+                    Perfect Compliance!
+                  </h4>
+                  <p className="text-gray-600">
+                    No violations found. Your content meets all compliance requirements.
+                  </p>
+                </div>
+              )}
             </div>
-          ) : (
-            <div className="text-center py-12">
-              <svg
-                className="w-20 h-20 text-green-500 mx-auto mb-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+          </div>
+        </div>
+      )}
+
+      {/* Tab Content: Deep Research */}
+      {activeTab === 'deep-research' && id && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Action Header */}
+          {results.has_deep_analysis && (
+            <div className="flex justify-end gap-3">
+              <button
+                onClick={async () => {
+                  console.log('[SYNC] Button clicked!');
+                  console.log('[SYNC] results.submission_id:', results.submission_id);
+                  try {
+                    console.log('[SYNC] Starting sync API call...');
+                    await api.syncDeepAnalysisResults(results.submission_id);
+                    console.log('[SYNC] Sync complete, fetching updated results...');
+                    await fetchResults();
+                    console.log('[SYNC] Results refreshed successfully!');
+                    setActiveTab('overview'); // Switch to Overview tab to show updated results
+                    alert("✅ Overview updated successfully! Deep Analysis scores and violations have been applied.");
+                  } catch (err) {
+                    console.error('[SYNC] Failed to sync results:', err);
+                    alert('❌ Failed to sync results. Please try again.');
+                  }
+                }}
+                className="flex items-center gap-2 px-6 py-3 bg-indigo-600 text-white border-2 border-indigo-600 rounded-xl font-semibold hover:bg-indigo-700 transition-all shadow-sm"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                />
-              </svg>
-              <h4 className="text-xl font-semibold text-gray-900 mb-2">
-                Perfect Compliance!
-              </h4>
-              <p className="text-gray-600">
-                No violations found. Your content meets all compliance requirements.
-              </p>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Apply to Overview
+              </button>
+
+              <button
+                onClick={async () => {
+                  try {
+                    const response = await api.downloadDeepAnalysisReport(results.submission_id);
+                    const url = window.URL.createObjectURL(new Blob([response.data]));
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.setAttribute('download', `Analysis_Report_${results.submission_id.slice(0, 8)}.html`);
+                    document.body.appendChild(link);
+                    link.click();
+                    link.remove();
+                  } catch (err) {
+                    console.error('Failed to download report:', err);
+                    alert('Failed to download report. Please try again.');
+                  }
+                }}
+                className="flex items-center gap-2 px-6 py-3 bg-white text-gray-700 border-2 border-gray-200 rounded-xl font-semibold hover:bg-gray-50 hover:border-gray-300 transition-all shadow-sm"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                </svg>
+                Download Report (HTML)
+              </button>
             </div>
           )}
+
+          <DeepAnalysisPanel
+            submissionId={id}
+            onAnalysisComplete={fetchResults}
+          />
         </div>
-      </div>
+      )}
     </div>
   );
 };

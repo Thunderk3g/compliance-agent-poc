@@ -7,6 +7,7 @@ import { api } from '../../lib/api';
 interface Props {
     submissionId: string;
     onClose?: () => void;
+    onAnalysisComplete?: () => void;
 }
 
 interface ProgressState {
@@ -28,7 +29,7 @@ interface ProgressState {
     message?: string;
 }
 
-export const DeepAnalysisPanel: React.FC<Props> = ({ submissionId, onClose }) => {
+export const DeepAnalysisPanel: React.FC<Props> = ({ submissionId, onClose, onAnalysisComplete }) => {
     const [weights, setWeights] = useState<SeverityWeights>(SEVERITY_PRESETS.balanced);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
@@ -59,10 +60,32 @@ export const DeepAnalysisPanel: React.FC<Props> = ({ submissionId, onClose }) =>
         const checkExistingResults = async () => {
             try {
                 const response = await api.getDeepAnalysisResults(submissionId);
-                if (response.data && response.data.lines && response.data.lines.length > 0) {
+                // Handle different statuses
+                if (response.data) {
                     setResults(response.data);
                     setWeights(response.data.severity_config);
-                    setHasExistingResults(true);
+
+                    if (response.data.status === 'completed' && response.data.lines && response.data.lines.length > 0) {
+                        setHasExistingResults(true);
+                    } else if (response.data.status === 'processing') {
+                        // If processing, we can either try to resume stream or just show loading state
+                        // For now, let's show it as "Resume/In Progress" state
+                        setHasExistingResults(true); // Show the results we have so far? Or show spinner?
+                        // Actually, if it is processing, we might want to poll or just indicate it.
+                        // Let's set a local status to indicate background processing if needed, 
+                        // but for simplest UI fix:
+                        if (response.data.lines.length === 0) {
+                            // Started but no lines yet
+                            setProgress(prev => ({ ...prev, status: 'processing', progress: 0, message: 'Analysis running in background...' }));
+                            setLoading(true);
+                        } else {
+                            // Has partial lines
+                            setHasExistingResults(true);
+                        }
+                    } else if (response.data.lines && response.data.lines.length > 0) {
+                        // Fallback for legacy records without status
+                        setHasExistingResults(true);
+                    }
                 }
             } catch {
                 setHasExistingResults(false);
@@ -157,6 +180,7 @@ export const DeepAnalysisPanel: React.FC<Props> = ({ submissionId, onClose }) =>
                                 const fullResults = await api.getDeepAnalysisResults(submissionId);
                                 setResults(fullResults.data);
                                 setHasExistingResults(true);
+                                onAnalysisComplete?.();
                             }
                         } catch (parseError) {
                             // Ignore parse errors for incomplete chunks
@@ -233,13 +257,30 @@ export const DeepAnalysisPanel: React.FC<Props> = ({ submissionId, onClose }) =>
 
                 {/* Existing Results Indicator */}
                 {hasExistingResults && results && !loading && (
-                    <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-xl">
-                        <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                        </svg>
-                        <span className="text-sm text-green-700">
-                            Previous analysis loaded (analyzed {new Date(results.analysis_timestamp).toLocaleDateString()})
-                        </span>
+                    <div className={`flex items-center gap-2 p-3 border rounded-xl ${results.status === 'processing'
+                            ? 'bg-blue-50 border-blue-200'
+                            : 'bg-green-50 border-green-200'
+                        }`}>
+                        {results.status === 'processing' ? (
+                            <>
+                                <svg className="w-5 h-5 text-blue-600 animate-spin" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
+                                </svg>
+                                <span className="text-sm text-blue-700">
+                                    Analysis in progress in background... (Refresh to see latest)
+                                </span>
+                            </>
+                        ) : (
+                            <>
+                                <svg className="w-5 h-5 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                <span className="text-sm text-green-700">
+                                    Previous analysis loaded (analyzed {new Date(results.analysis_timestamp).toLocaleDateString()})
+                                </span>
+                            </>
+                        )}
                     </div>
                 )}
 

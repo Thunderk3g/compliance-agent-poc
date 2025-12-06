@@ -11,6 +11,7 @@ from ...models.compliance_check import ComplianceCheck
 from ...models.violation import Violation
 from ...models.submission import Submission
 from ...models.rule import Rule
+from ...models.deep_analysis import DeepAnalysis
 from ...schemas.compliance import ComplianceCheckResponse, ViolationResponse
 from ...schemas.deep_analysis import (
     DeepAnalysisRequest,
@@ -51,6 +52,7 @@ def get_compliance_results(
         grade=check.grade,
         ai_summary=check.ai_summary,
         check_date=check.check_date,
+        has_deep_analysis=True if check.deep_analysis else False,
         violations=[ViolationResponse.from_orm(v) for v in violations]
     )
 
@@ -256,9 +258,37 @@ async def stream_deep_analysis(
             config_snapshot = severity_weights.model_dump()
             results = []
             
-            # Send initial status
+             # Send initial status
             yield f"data: {json.dumps({'status': 'started', 'total_lines': total, 'document_title': submission.title})}\n\n"
             await asyncio.sleep(0.1)
+
+            # Create initial record with 'processing' status
+            from ...models.deep_analysis import DeepAnalysis
+
+             # Create snapshot of severity config used
+            config_snapshot = {
+                "critical": request.severity_weights.critical,
+                "high": request.severity_weights.high,
+                "medium": request.severity_weights.medium,
+                "low": request.severity_weights.low
+            }
+
+            # Delete existing
+            db.query(DeepAnalysis).filter(DeepAnalysis.check_id == check.id).delete()
+            
+            # Create record
+            deep_record = DeepAnalysis(
+                check_id=check.id,
+                submission_id=submission.id,
+                total_lines=total,
+                document_title=submission.title,
+                severity_config_snapshot=config_snapshot,
+                analysis_data=[],
+                status='processing'
+            )
+            db.add(deep_record)
+            db.commit() # Commit to make visible
+            db.refresh(deep_record)
             
             # Process each line
             for i, segment in enumerate(segments):
@@ -318,26 +348,42 @@ async def stream_deep_analysis(
             
             # Save to database
             from decimal import Decimal
-            from ...models.deep_analysis import DeepAnalysis
             
-            avg_score = sum(r["line_score"] for r in results) / len(results)
-            scores = [r["line_score"] for r in results]
+            # Phase 2: Update original ComplianceCheck with new Deep Analysis scores
+            # 1. Collect all violations found during deep analysis
+            all_violations = []
+            for r in results:
+                all_violations.extend(r.get("rule_impacts", []))
             
-            # Delete existing
-            db.query(DeepAnalysis).filter(DeepAnalysis.check_id == check.id).delete()
+            # 2. Calculate new scores using ScoringService (standardized logic)
+            # Import locally to avoid circular dependencies if any
+            from ...services.scoring_service import ScoringService
+            new_scores = ScoringService.calculate_scores(all_violations, db)
             
-            # Create record
-            deep_record = DeepAnalysis(
-                check_id=check.id,
-                total_lines=len(results),
-                average_score=Decimal(str(round(avg_score, 2))),
-                min_score=Decimal(str(round(min(scores), 2))),
-                max_score=Decimal(str(round(max(scores), 2))),
-                document_title=submission.title,
-                severity_config_snapshot=config_snapshot,
-                analysis_data=results
-            )
+            # 3. Update the ComplianceCheck record
+            check.overall_score = new_scores["overall"]
+            check.irdai_score = new_scores["irdai"]
+            check.brand_score = new_scores["brand"]
+            check.seo_score = new_scores["seo"]
+            check.grade = new_scores["grade"]
+            check.status = new_scores["status"]
+            
+            # Log the update
+            # logger.info(f"Updated ComplianceCheck {check.id} with Deep Analysis scores: {new_scores}")
+            
+            avg_score = sum(r["line_score"] for r in results) / len(results) if results else 0
+            scores = [r["line_score"] for r in results] if results else [0]
+            
+            
+            # Update record
+            deep_record.average_score = Decimal(str(round(avg_score, 2)))
+            deep_record.min_score = Decimal(str(round(min(scores), 2)))
+            deep_record.max_score = Decimal(str(round(max(scores), 2)))
+            deep_record.analysis_data = results
+            deep_record.status = 'completed'
+
             db.add(deep_record)
+            db.add(check)  # Ensure check update is tracked
             db.commit()
             
             # Send completion
@@ -353,6 +399,18 @@ async def stream_deep_analysis(
             
         except Exception as e:
             logger.error(f"Stream error: {str(e)}")
+            # Attempt to mark as failed
+            try:
+                # Need fresh session or rollback if transaction failed
+                db.rollback()
+                failed_check = db.query(ComplianceCheck).filter(ComplianceCheck.submission_id == submission_id).first()
+                if failed_check:
+                    failed_record = db.query(DeepAnalysis).filter(DeepAnalysis.check_id == failed_check.id).first()
+                    if failed_record:
+                        failed_record.status = 'failed'
+                        db.commit()
+            except:
+                pass
             yield f"data: {json.dumps({'status': 'error', 'message': str(e)})}\n\n"
     
     return StreamingResponse(
@@ -364,3 +422,218 @@ async def stream_deep_analysis(
             "Access-Control-Allow-Origin": "*"
         }
     )
+
+
+@router.get(
+    "/{submission_id}/deep-analysis/export",
+    summary="Export deep analysis report as DOCX"
+)
+async def export_deep_analysis_report(
+    submission_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Generate and download a DOCX report for the deep compliance analysis.
+    """
+    # Get submission title
+    submission = db.query(Submission).filter(Submission.id == submission_id).first()
+    if not submission:
+        raise HTTPException(404, "Submission not found")
+        
+    # Get deep analysis results
+    result = await deep_analysis_service.get_deep_analysis_results(
+        submission_id=submission_id,
+        db=db
+    )
+    
+    if not result:
+        raise HTTPException(404, "No deep analysis found. Run analysis first.")
+
+    # Generate HTML (Inline to avoid import issues)
+    try:
+        # Build HTML content
+        html_content = f"""
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6; }}
+            h1 {{ color: #2c3e50; text-align: center; }}
+            h2 {{ color: #34495e; border-bottom: 2px solid #eee; padding-bottom: 10px; }}
+            .stats-table {{ width: 100%; border-collapse: collapse; margin: 20px 0; }}
+            .stats-table th, .stats-table td {{ border: 1px solid #ddd; padding: 12px; text-align: center; }}
+            .stats-table th {{ background-color: #f8f9fa; }}
+            .score-red {{ color: #c0392b; }}
+            .score-green {{ color: #27ae60; }}
+            .violation {{ margin-left: 20px; color: #555; }}
+            .footer {{ margin-top: 50px; font-size: 0.8em; color: #7f8c8d; text-align: center; border-top: 1px solid #eee; padding-top: 20px; }}
+        </style>
+        </head>
+        <body>
+            <h1>Deep Compliance Analysis Report</h1>
+            <p><strong>Document:</strong> {submission.title}</p>
+            <p><strong>Analysis Status:</strong> {result.get('status', 'Completed').title()}</p>
+            
+            <h2>Executive Summary</h2>
+            <table class="stats-table">
+                <tr><th>Total Lines</th><th>Avg Score</th><th>Min Score</th><th>Max Score</th></tr>
+                <tr>
+                    <td>{result.get('total_lines', 0)}</td>
+                    <td>{result.get('average_score', 0):.2f}</td>
+                    <td>{result.get('min_score', 0):.2f}</td>
+                    <td>{result.get('max_score', 0):.2f}</td>
+                </tr>
+            </table>
+
+            <h2>Detailed Analysis</h2>
+        """
+        
+        lines = result.get('lines', [])
+        for line in lines:
+            content = line.get('line_content', '').strip()
+            if not content: continue
+            score = line.get('line_score', 100)
+            impacts = line.get('rule_impacts', [])
+            score_class = "score-red" if score < 100 else "score-green"
+            
+            html_content += f"""
+            <div style="margin-bottom: 15px; border-bottom: 1px solid #eee;">
+                <p><strong>Line {line.get('line_number')}:</strong> {content}</p>
+                <p>Score: <span class="{score_class}">{score:.2f}</span></p>
+            """
+            if impacts:
+                html_content += "<ul>"
+                for impact in impacts:
+                    html_content += f"<li>[{impact.get('severity','').upper()}] {impact.get('violation_reason')}</li>"
+                html_content += "</ul>"
+            html_content += "</div>"
+            
+        html_content += "</body></html>"
+        
+        from datetime import datetime
+        filename = f"Compliance_Deep_Analysis_{submission_id}_{datetime.now().strftime('%Y%m%d')}.html"
+        
+        from fastapi import Response
+        return Response(
+            content=html_content,
+            media_type="text/html",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}"
+            }
+        )
+    except Exception as e:
+        raise HTTPException(500, f"Failed to generate report: {str(e)}")
+
+@router.post(
+    "/{submission_id}/deep-analysis/sync",
+    summary="Sync Deep Analysis results to main Overview"
+)
+async def sync_deep_analysis_results(
+    submission_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Promote Deep Analysis results to the main Compliance Check.
+    
+    1. Updates ComplianceCheck.overall_score to match DeepAnalysis.average_score
+    2. Replaces all Violations with those found in Deep Analysis
+    3. Recalculates sub-scores (IRDAI, Brand, SEO) based on the new violations
+    """
+    # Get Deep Analysis
+    deep_analysis = db.query(DeepAnalysis).join(ComplianceCheck).filter(
+        ComplianceCheck.submission_id == submission_id
+    ).first()
+    
+    if not deep_analysis:
+        raise HTTPException(404, "Deep Analysis results not found")
+        
+    # Get Compliance Check
+    check = deep_analysis.compliance_check
+    if not check:
+        raise HTTPException(404, "Compliance Check not found")
+        
+    try:
+        # 1. Convert Deep Analysis impacts to Violations
+        new_violations = []
+        analysis_data = deep_analysis.analysis_data or []
+        
+        for line in analysis_data:
+            impacts = line.get("rule_impacts", [])
+            line_content = line.get("line_content", "")
+            line_number = line.get("line_number")
+            
+            for impact in impacts:
+                # Map RuleImpact to Violation
+                violation_dict = {
+                    "check_id": check.id,
+                    "rule_id": impact.get("rule_id"),
+                    "severity": impact.get("severity", "low"),
+                    "category": impact.get("category", "unknown"),
+                    "description": impact.get("violation_reason", "Violation detected via Deep Analysis"),
+                    "location": f"Line {line_number}",
+                    "current_text": line_content.strip(),
+                    "suggested_fix": "Review compliance guidelines.", # AI doesn't provide fixes in deep mode yet
+                    "is_auto_fixable": False
+                }
+                new_violations.append(violation_dict)
+        
+        # 2. Delete existing violations
+        db.query(Violation).filter(Violation.check_id == check.id).delete()
+        
+        # 3. Insert new violations
+        for v_data in new_violations:
+            db_violation = Violation(**v_data)
+            db.add(db_violation)
+            
+        # 4. Update Scores
+        # We explicitly set overall_score to Deep Analysis average to match user request
+        check.overall_score = deep_analysis.average_score
+        
+        # Recalculate sub-scores using ScoringService on the NEW violations
+        # This ensures sub-scores are consistent with the new violation set
+        # We ignore the returned 'overall' from scoring service in favor of DA average
+        from ...services.scoring_service import scoring_service
+        
+        try:
+            scores = scoring_service.calculate_scores(new_violations, db)
+            check.irdai_score = scores["irdai"]
+            check.brand_score = scores["brand"]
+            check.seo_score = scores["seo"]
+            check.grade = scores["grade"]
+            check.status = scores["status"]
+        except Exception as scoring_error:
+            # If scoring fails (e.g., due to missing rules), use simple defaults
+            logger.warning(f"Scoring service failed, using defaults: {str(scoring_error)}")
+            violation_count = len(new_violations)
+            check.irdai_score = max(0, 100 - (violation_count * 2))
+            check.brand_score = max(0, 100 - (violation_count * 2))
+            check.seo_score = max(0, 100 - (violation_count * 2))
+            
+            # Derive grade and status from overall score
+            overall = float(check.overall_score)
+            if overall >= 90:
+                check.grade = "A"
+                check.status = "passed"
+            elif overall >= 80:
+                check.grade = "B"
+                check.status = "passed"
+            elif overall >= 70:
+                check.grade = "C"
+                check.status = "flagged"
+            elif overall >= 60:
+                check.grade = "D"
+                check.status = "flagged"
+            else:
+                check.grade = "F"
+                check.status = "failed"
+        
+        check.ai_summary = "Updated with Deep Analysis findings."
+        
+        db.commit()
+        
+        return {"status": "success", "message": "Results synced to Overview"}
+        
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Sync failed: {str(e)}")
+        raise HTTPException(500, f"Sync failed: {str(e)}")

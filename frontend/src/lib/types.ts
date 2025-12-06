@@ -5,6 +5,7 @@ export interface Submission {
   status: 'pending' | 'analyzing' | 'completed' | 'failed';
   submitted_at: string;
   submitted_by?: string;
+  has_deep_analysis?: boolean;
 }
 
 export interface ComplianceCheck {
@@ -18,6 +19,7 @@ export interface ComplianceCheck {
   grade: string;
   ai_summary: string;
   check_date: string;
+  has_deep_analysis?: boolean;
   violations: Violation[];
 }
 
@@ -38,6 +40,31 @@ export interface DashboardStats {
   pending_count: number;
   flagged_count: number;
 }
+
+// Dashboard analytics types
+export interface ComplianceTrendsResponse {
+  dates: string[];
+  scores: number[];
+  counts: number[];
+}
+
+export interface HeatmapSeriesItem {
+  name: string;
+  data: number[];
+}
+
+export interface ViolationsHeatmapResponse {
+  series: HeatmapSeriesItem[];
+  categories: string[];
+}
+
+export interface TopViolation {
+  description: string;
+  count: number;
+  severity: string;
+  category: string;
+}
+
 
 // Phase 2: Admin rule management types
 export interface Rule {
@@ -181,6 +208,7 @@ export interface DeepAnalysisResponse {
   min_score: number;
   max_score: number;
   severity_config: SeverityWeights;
+  status: 'pending' | 'processing' | 'completed' | 'failed';
   lines: LineAnalysis[];
   analysis_timestamp: string;
 }

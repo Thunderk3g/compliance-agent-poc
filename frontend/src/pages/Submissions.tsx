@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../lib/api';
 import { Submission } from '../lib/types';
 import { format } from 'date-fns';
+import { BrainCircuit } from 'lucide-react';
 
 export const Submissions: React.FC = () => {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
@@ -27,7 +28,7 @@ export const Submissions: React.FC = () => {
   };
 
   const handleAnalyze = async (id: string) => {
-    setActionLoading(prev => ({...prev, [id]: true}));
+    setActionLoading(prev => ({ ...prev, [id]: true }));
     try {
       await api.analyzeSubmission(id);
       // Refresh submissions
@@ -38,7 +39,7 @@ export const Submissions: React.FC = () => {
       console.error('Analysis failed:', error);
       alert('Analysis failed. Please try again.');
     } finally {
-      setActionLoading(prev => ({...prev, [id]: false}));
+      setActionLoading(prev => ({ ...prev, [id]: false }));
     }
   };
 
@@ -46,7 +47,7 @@ export const Submissions: React.FC = () => {
     if (!confirm('Are you sure you want to delete this submission? This action cannot be undone.')) {
       return;
     }
-    setActionLoading(prev => ({...prev, [id]: true}));
+    setActionLoading(prev => ({ ...prev, [id]: true }));
     try {
       await api.deleteSubmission(id);
       // Refresh submissions
@@ -55,7 +56,7 @@ export const Submissions: React.FC = () => {
       console.error('Delete failed:', error);
       alert('Failed to delete submission. Please try again.');
     } finally {
-      setActionLoading(prev => ({...prev, [id]: false}));
+      setActionLoading(prev => ({ ...prev, [id]: false }));
     }
   };
 
@@ -110,11 +111,10 @@ export const Submissions: React.FC = () => {
           <button
             onClick={handleDeleteAll}
             disabled={deletingAll}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              deletingAll
-                ? 'bg-red-400 text-white cursor-not-allowed'
-                : 'bg-red-600 text-white hover:bg-red-700'
-            }`}
+            className={`px-4 py-2 rounded-lg font-medium transition-colors ${deletingAll
+              ? 'bg-red-400 text-white cursor-not-allowed'
+              : 'bg-red-600 text-white hover:bg-red-700'
+              }`}
           >
             {deletingAll ? 'Deleting All...' : 'Delete All Submissions'}
           </button>
@@ -152,7 +152,15 @@ export const Submissions: React.FC = () => {
                   {submission.content_type.toUpperCase()}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap">
-                  {getStatusBadge(submission.status)}
+                  <div className="flex items-center gap-2">
+                    {getStatusBadge(submission.status)}
+                    {submission.has_deep_analysis && (
+                      <span className="inline-flex items-center gap-1 px-2 py-1 text-xs font-medium rounded-full bg-purple-100 text-purple-800 border border-purple-200" title="Deep Analysis Ready">
+                        <BrainCircuit className="w-3 h-3" />
+                        Deep Analyzed
+                      </span>
+                    )}
+                  </div>
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                   {format(new Date(submission.submitted_at), 'MMM dd, yyyy')}

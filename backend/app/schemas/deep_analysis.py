@@ -115,6 +115,10 @@ class DeepAnalysisResponse(BaseModel):
     severity_config: SeverityWeights = Field(
         description="Severity weights used for this analysis (audit snapshot)"
     )
+    status: str = Field(
+        default="completed",
+        description="Status of the analysis: pending, processing, completed, failed"
+    )
     lines: List[LineAnalysisResult] = Field(
         description="Line-by-line analysis results"
     )
