@@ -243,6 +243,47 @@ async def update_rule(
 
 
 @router.delete(
+    "/rules",
+    summary="Delete (deactivate) all rules"
+)
+async def delete_all_rules(
+    current_user: User = Depends(require_super_admin),
+    db: Session = Depends(get_db_session)
+):
+    """
+    Soft delete all rules by setting is_active to False.
+
+    **Requires**: super_admin role
+
+    **Note**: Rules are soft-deleted to preserve historical compliance data.
+    """
+    try:
+        # Get count of active rules before deletion
+        active_count = db.query(Rule).filter(Rule.is_active == True).count()
+        
+        # Soft delete all active rules
+        db.query(Rule).filter(Rule.is_active == True).update(
+            {"is_active": False},
+            synchronize_session=False
+        )
+        db.commit()
+        
+        logger.info(f"User {current_user.id} soft-deleted {active_count} rules")
+        
+        return {
+            "message": f"Successfully deactivated {active_count} rule(s)",
+            "deactivated_count": active_count
+        }
+    except Exception as e:
+        db.rollback()
+        logger.error(f"Error deleting all rules: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete rules: {str(e)}"
+        )
+
+
+@router.delete(
     "/rules/{rule_id}",
     status_code=status.HTTP_204_NO_CONTENT,
     summary="Delete (deactivate) a rule"
@@ -272,6 +313,7 @@ async def delete_rule(
         )
 
     return None
+
 
 
 @router.post(

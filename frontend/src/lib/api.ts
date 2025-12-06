@@ -99,6 +99,11 @@ export const api = {
       headers: { 'X-User-Id': userId },
     }),
 
+  deleteAllRules: (userId: string) =>
+    apiClient.delete('/api/admin/rules', {
+      headers: { 'X-User-Id': userId },
+    }),
+
   createRule: (data: any, userId: string) =>
     apiClient.post('/api/admin/rules', data, {
       headers: { 'X-User-Id': userId },

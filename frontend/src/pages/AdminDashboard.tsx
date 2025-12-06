@@ -40,6 +40,9 @@ export default function AdminDashboard() {
   // Edit modal state
   const [editingRule, setEditingRule] = useState<Rule | null>(null);
 
+  // Delete all state
+  const [deletingAll, setDeletingAll] = useState(false);
+
   // Fetch rules
   const fetchRules = async () => {
     try {
@@ -142,6 +145,30 @@ export default function AdminDashboard() {
     }
   };
 
+  // Handle delete all rules
+  const handleDeleteAllRules = async () => {
+    if (rules.length === 0) {
+      alert('No rules to delete.');
+      return;
+    }
+
+    if (!confirm(`Are you sure you want to deactivate ALL ${totalRules} rule(s)? This will soft-delete all rules (they can be restored by setting is_active back to true).`)) {
+      return;
+    }
+
+    setDeletingAll(true);
+    try {
+      const response = await api.deleteAllRules(SUPER_ADMIN_USER_ID);
+      alert(response.data.message);
+      await fetchRules();
+      await fetchStats();
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to delete all rules');
+    } finally {
+      setDeletingAll(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -205,6 +232,26 @@ export default function AdminDashboard() {
               </span>
             )}
           </h2>
+          <button
+            onClick={handleDeleteAllRules}
+            disabled={deletingAll || rules.length === 0}
+            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors ${deletingAll || rules.length === 0
+                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                : 'bg-red-600 text-white hover:bg-red-700'
+              }`}
+          >
+            {deletingAll ? (
+              <span className="flex items-center">
+                <svg className="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Deleting...
+              </span>
+            ) : (
+              'Delete All Rules'
+            )}
+          </button>
         </div>
 
         <RulesTable
