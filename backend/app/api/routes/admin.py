@@ -27,7 +27,7 @@ from ..deps import get_db_session, require_super_admin
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/admin", tags=["admin"])
+router = APIRouter(prefix="/api/admin", tags=["admin"])
 
 
 @router.post(

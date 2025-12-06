@@ -82,7 +82,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - uploads:/app/uploads
+      - uploads:/app/uploads  # Phase 2: Stores uploaded documents for rule generation
     depends_on:
       postgres:
         condition: service_healthy

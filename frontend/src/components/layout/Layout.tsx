@@ -1,6 +1,6 @@
 import React from 'react';
 import { Link, Outlet } from 'react-router-dom';
-import { FileText, Upload, BarChart3, List } from 'lucide-react';
+import { FileText, Upload, BarChart3, List, Settings } from 'lucide-react';
 
 export const Layout: React.FC = () => {
   return (
@@ -23,6 +23,11 @@ export const Layout: React.FC = () => {
             <Link to="/submissions" className="flex items-center gap-2 text-gray-700 hover:text-blue-600 transition-colors">
               <List className="h-4 w-4" />
               Submissions
+            </Link>
+            <span className="border-l border-gray-300"></span>
+            <Link to="/admin" className="flex items-center gap-2 text-purple-700 hover:text-purple-500 transition-colors font-medium">
+              <Settings className="h-4 w-4" />
+              Admin
             </Link>
           </nav>
         </div>
