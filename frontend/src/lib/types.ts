@@ -91,3 +91,51 @@ export interface RuleStats {
     low: number;
   };
 }
+
+// Rule Preview Types (Phase 2 Enhancement)
+export interface DraftRule {
+  temp_id: string;
+  category: 'irdai' | 'brand' | 'seo';
+  rule_text: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  keywords: string[];
+  pattern: string | null;
+  points_deduction: number;
+  is_approved: boolean;
+}
+
+export interface RulePreviewResponse {
+  success: boolean;
+  document_title: string;
+  draft_rules: DraftRule[];
+  total_extracted: number;
+  errors: string[];
+}
+
+export interface RuleRefineRequest {
+  rule_text: string;
+  refinement_instruction: string;
+  category: string;
+  severity: string;
+}
+
+export interface RuleRefineResponse {
+  success: boolean;
+  original_text: string;
+  refined_text: string;
+  refined_keywords: string[];
+  error: string | null;
+}
+
+export interface RuleBulkSubmitRequest {
+  document_title: string;
+  approved_rules: DraftRule[];
+}
+
+export interface RuleBulkSubmitResponse {
+  success: boolean;
+  rules_created: number;
+  rules_failed: number;
+  created_rule_ids: string[];
+  errors: string[];
+}

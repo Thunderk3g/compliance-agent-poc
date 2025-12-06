@@ -113,4 +113,36 @@ export const api = {
     apiClient.get('/api/admin/rules/stats/summary', {
       headers: { 'X-User-Id': userId },
     }),
+
+  // Rule Preview Workflow (Phase 2 Enhancement)
+  previewRulesFromDocument: (file: File, documentTitle: string, userId: string) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('document_title', documentTitle);
+
+    return apiClient.post('/api/admin/rules/preview', formData, {
+      headers: {
+        'Content-Type': 'multipart/form-data',
+        'X-User-Id': userId,
+      },
+    });
+  },
+
+  refineRule: (data: {
+    rule_text: string;
+    refinement_instruction: string;
+    category: string;
+    severity: string;
+  }, userId: string) =>
+    apiClient.post('/api/admin/rules/refine', data, {
+      headers: { 'X-User-Id': userId },
+    }),
+
+  bulkSubmitRules: (data: {
+    document_title: string;
+    approved_rules: any[];
+  }, userId: string) =>
+    apiClient.post('/api/admin/rules/bulk-submit', data, {
+      headers: { 'X-User-Id': userId },
+    }),
 };

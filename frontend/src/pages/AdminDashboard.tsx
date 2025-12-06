@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { api } from '../lib/api';
-import { Rule, RuleStats, RuleGenerationResponse } from '../lib/types';
+import { Rule, RuleStats, RuleGenerationResponse, DraftRule, RulePreviewResponse, RuleBulkSubmitResponse } from '../lib/types';
 import {
   RuleStatsCards,
   RuleUploadForm,
@@ -8,6 +8,7 @@ import {
   RulesTable,
   Pagination,
   RuleEditModal,
+  RulePreviewPanel,
 } from '../components/admin';
 
 // POC: Hard-coded super admin user ID
@@ -40,6 +41,11 @@ export default function AdminDashboard() {
   // Upload state
   const [uploading, setUploading] = useState(false);
   const [uploadResult, setUploadResult] = useState<RuleGenerationResponse | null>(null);
+
+  // Preview state (new workflow)
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewData, setPreviewData] = useState<RulePreviewResponse | null>(null);
+  const [draftRules, setDraftRules] = useState<DraftRule[]>([]);
 
   // Edit modal state
   const [editingRule, setEditingRule] = useState<Rule | null>(null);
@@ -101,32 +107,62 @@ export default function AdminDashboard() {
     fetchStats();
   }, []);
 
-  // Handle file upload
+  // Handle file upload - NEW PREVIEW WORKFLOW
   const handleUpload = async (file: File, documentTitle: string) => {
     try {
       setUploading(true);
       setError(null);
       setUploadResult(null);
+      setPreviewData(null);
 
-      const response = await api.generateRulesFromDocument(
+      // Use preview endpoint instead of generate
+      const response = await api.previewRulesFromDocument(
         file,
         documentTitle,
         SUPER_ADMIN_USER_ID
       );
 
-      const result: RuleGenerationResponse = response.data;
-      setUploadResult(result);
+      const result: RulePreviewResponse = response.data;
+      setPreviewData(result);
 
-      if (result.success) {
-        // Refresh rules list and stats
-        await fetchRules();
-        await fetchStats();
+      if (result.success && result.draft_rules.length > 0) {
+        setDraftRules(result.draft_rules);
+        setShowPreview(true);
+      } else if (result.errors.length > 0) {
+        setError(result.errors.join(', '));
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to generate rules');
+      setError(err.response?.data?.detail || 'Failed to generate rule preview');
     } finally {
       setUploading(false);
     }
+  };
+
+  // Handle preview submit success
+  const handlePreviewSubmitSuccess = async (response: RuleBulkSubmitResponse) => {
+    setShowPreview(false);
+    setPreviewData(null);
+    setDraftRules([]);
+
+    // Show success message as uploadResult for compatibility
+    setUploadResult({
+      success: response.success,
+      rules_created: response.rules_created,
+      rules_failed: response.rules_failed,
+      rules: [],
+      errors: response.errors,
+    });
+
+    // Refresh rules list and stats
+    await fetchRules();
+    await fetchStats();
+  };
+
+  // Handle preview cancel
+  const handlePreviewCancel = () => {
+    setShowPreview(false);
+    setPreviewData(null);
+    setDraftRules([]);
   };
 
   // Handle rule update
@@ -228,8 +264,21 @@ export default function AdminDashboard() {
       {/* Stats Cards */}
       <RuleStatsCards stats={stats} loading={statsLoading} />
 
-      {/* Upload Section - Only show on Active tab */}
-      {activeTab === 'active' && (
+      {/* Rule Preview Panel - Shows when previewing generated rules */}
+      {showPreview && previewData && (
+        <RulePreviewPanel
+          documentTitle={previewData.document_title}
+          draftRules={draftRules}
+          totalExtracted={previewData.total_extracted}
+          errors={previewData.errors}
+          onRulesChange={setDraftRules}
+          onSubmitSuccess={handlePreviewSubmitSuccess}
+          onCancel={handlePreviewCancel}
+        />
+      )}
+
+      {/* Upload Section - Only show on Active tab and when NOT previewing */}
+      {activeTab === 'active' && !showPreview && (
         <RuleUploadForm
           onUpload={handleUpload}
           uploading={uploading}
@@ -243,8 +292,8 @@ export default function AdminDashboard() {
           <button
             onClick={() => setActiveTab('active')}
             className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'active'
-                ? 'border-blue-500 text-blue-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              ? 'border-blue-500 text-blue-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
           >
             <span className="flex items-center gap-2">
@@ -260,8 +309,8 @@ export default function AdminDashboard() {
           <button
             onClick={() => setActiveTab('deactivated')}
             className={`py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'deactivated'
-                ? 'border-red-500 text-red-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+              ? 'border-red-500 text-red-600'
+              : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
               }`}
           >
             <span className="flex items-center gap-2">
