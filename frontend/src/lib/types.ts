@@ -38,3 +38,56 @@ export interface DashboardStats {
   pending_count: number;
   flagged_count: number;
 }
+
+// Phase 2: Admin rule management types
+export interface Rule {
+  id: string;
+  category: 'irdai' | 'brand' | 'seo';
+  rule_text: string;
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  keywords: string[];
+  pattern: string | null;
+  points_deduction: number;
+  is_active: boolean;
+  created_by: string | null;
+  created_at: string;
+}
+
+export interface RuleListResponse {
+  rules: Rule[];
+  total: number;
+  page: number;
+  page_size: number;
+  total_pages: number;
+}
+
+export interface RuleGenerationResponse {
+  success: boolean;
+  rules_created: number;
+  rules_failed: number;
+  rules: Array<{
+    id: string;
+    category: string;
+    rule_text: string;
+    severity: string;
+    points_deduction: number;
+  }>;
+  errors: string[];
+}
+
+export interface RuleStats {
+  total_rules: number;
+  active_rules: number;
+  inactive_rules: number;
+  by_category: {
+    irdai: number;
+    brand: number;
+    seo: number;
+  };
+  by_severity: {
+    critical: number;
+    high: number;
+    medium: number;
+    low: number;
+  };
+}

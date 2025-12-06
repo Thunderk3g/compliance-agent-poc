@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 from .config import settings
-from .api.routes import submissions, compliance, dashboard
+from .api.routes import submissions, compliance, dashboard, admin
 from .services.ollama_service import ollama_service
 
 # Configure logging
@@ -55,6 +55,7 @@ app.add_middleware(
 app.include_router(submissions.router)
 app.include_router(compliance.router)
 app.include_router(dashboard.router)
+app.include_router(admin.router)  # Phase 2: Admin routes for rule management
 
 
 # Health check

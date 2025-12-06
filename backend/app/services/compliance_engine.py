@@ -96,8 +96,8 @@ Analyze the following content against these compliance rules:
             logger.info("Parsing Ollama response...")
             analysis_result = ComplianceEngine._parse_ollama_response(response)
 
-            # 6. Calculate scores
-            scores = scoring_service.calculate_scores(analysis_result["violations"])
+            # 6. Calculate scores (Phase 2: Pass DB session for rule-based scoring)
+            scores = scoring_service.calculate_scores(analysis_result["violations"], db=db)
 
             # 7. Store results
             compliance_check = ComplianceCheck(

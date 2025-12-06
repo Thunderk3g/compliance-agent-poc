@@ -4,6 +4,7 @@ import Dashboard from './pages/Dashboard';
 import { Upload } from './pages/Upload';
 import { Submissions } from './pages/Submissions';
 import { Results } from './pages/Results';
+import AdminDashboard from './pages/AdminDashboard';
 
 function App() {
   return (
@@ -14,6 +15,7 @@ function App() {
           <Route path="upload" element={<Upload />} />
           <Route path="submissions" element={<Submissions />} />
           <Route path="results/:id" element={<Results />} />
+          <Route path="admin" element={<AdminDashboard />} /> {/* Phase 2: Admin Dashboard */}
         </Route>
       </Routes>
     </BrowserRouter>
