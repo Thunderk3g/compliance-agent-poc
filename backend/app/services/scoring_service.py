@@ -69,7 +69,7 @@ class ScoringService:
         status = ScoringService._get_status(enriched_violations, overall_score)
 
         return {
-            "overall": round(overall_score, 2),
+            "overall": max(0.0, min(100.0, round(overall_score, 2))),
             "irdai": round(irdai_score, 2),
             "brand": round(brand_score, 2),
             "seo": round(seo_score, 2),
@@ -142,6 +142,9 @@ class ScoringService:
         
         Handles combined categories like "irdai|brand" by checking if the 
         target category is contained in the violation's category string.
+        
+        IMPORTANT: Uses proportional deduction to prevent scores from going to 0
+        when there are many violations.
         """
         base_score = 100.0
 
@@ -153,14 +156,34 @@ class ScoringService:
             if category == v_category or category in v_category.split("|"):
                 category_violations.append(v)
 
-        # Deduct points using DB-stored values
+        if not category_violations:
+            logger.debug(f"Category {category}: No violations, returning 100")
+            return 100.0
+
+        # Calculate total deduction
+        total_deduction = 0
         for violation in category_violations:
             deduction = violation.get("points_deduction", 0)
-            base_score -= deduction
-            logger.debug(f"Category {category}: Deducting {deduction} points")
+            total_deduction += deduction
+            logger.debug(f"Category {category}: +{deduction} points (severity={violation.get('severity')})")
 
-        # Ensure score doesn't go below 0
-        return max(0.0, base_score)
+        logger.info(f"Category {category}: {len(category_violations)} violations, total deduction={total_deduction}")
+
+        # Apply deduction with scaling to prevent zero scores
+        # If total deduction > 100, scale it down to max 95 (leave at least 5 points)
+        if total_deduction > 100:
+            # Use logarithmic scaling for very high deductions
+            # This ensures even with 1000 points of violations, score doesn't hit 0
+            scaled_deduction = 95 * (1 - (1 / (1 + total_deduction / 100)))
+            logger.info(f"Category {category}: Scaled {total_deduction} → {scaled_deduction:.2f}")
+            base_score -= scaled_deduction
+        else:
+            base_score -= total_deduction
+
+        # Ensure score doesn't go below 0 or above 100
+        final_score = max(0.0, min(100.0, base_score))
+        logger.info(f"Category {category}: Final score = {final_score:.2f}")
+        return final_score
 
     @staticmethod
     def _get_grade(score: float) -> str:

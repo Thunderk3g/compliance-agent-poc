@@ -92,4 +92,29 @@ class ContentParser:
         return '\n'.join(text)
 
 
+class ContentParserService:
+    """
+    Synchronous wrapper for ContentParser.
+    Used by PreprocessingService which needs sync methods.
+    """
+    
+    def parse_pdf(self, file_path: str) -> str:
+        """Synchronously parse PDF file."""
+        text = []
+        with open(file_path, 'rb') as f:
+            pdf_reader = PyPDF2.PdfReader(f)
+            for page_num in range(len(pdf_reader.pages)):
+                page = pdf_reader.pages[page_num]
+                text.append(page.extract_text())
+        return '\n'.join(text)
+    
+    def parse_docx(self, file_path: str) -> str:
+        """Synchronously parse DOCX file."""
+        doc = docx.Document(file_path)
+        text = []
+        for paragraph in doc.paragraphs:
+            text.append(paragraph.text)
+        return '\n'.join(text)
+
+
 content_parser = ContentParser()

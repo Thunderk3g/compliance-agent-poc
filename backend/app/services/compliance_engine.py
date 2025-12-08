@@ -53,14 +53,14 @@ Analyze the following content against these compliance rules:
     @staticmethod
     async def analyze_submission(submission_id: str, db: Session) -> ComplianceCheck:
         """
-        Analyze a submission for compliance.
+        Analyze a submission for compliance (CHUNK-AWARE).
 
         Workflow:
         1. Load submission
-        2. Load active rules
-        3. Build compliance prompt
-        4. Send to Ollama
-        5. Parse response
+        2. Get chunks via ContentRetrievalService (backward compatible)
+        3. Load active rules
+        4. Process each chunk through Ollama
+        5. Aggregate violations with chunk references
         6. Calculate scores
         7. Store results
         """
@@ -76,28 +76,55 @@ Analyze the following content against these compliance rules:
             submission.status = "analyzing"
             db.commit()
 
-            # 2. Load active rules
+            # 2. Get chunks via ContentRetrievalService (handles both chunked and legacy)
+            from .content_retrieval_service import ContentRetrievalService
+            content_service = ContentRetrievalService(db)
+            chunks = content_service.get_analyzable_content(submission_id)
+            
+            logger.info(f"Processing {len(chunks)} chunk(s) for analysis")
+
+            # 3. Load active rules
             rules = ComplianceEngine._load_active_rules(db)
 
-            # 3. Build prompt
-            prompt = ComplianceEngine._build_compliance_prompt(
-                content=submission.original_content,
-                rules=rules
-            )
+            # 4. Process each chunk
+            all_violations = []
+            
+            for chunk in chunks:
+                logger.info(f"Analyzing chunk {chunk.chunk_index + 1}/{len(chunks)}")
+                
+                # Build prompt with chunk content
+                prompt = ComplianceEngine._build_compliance_prompt(
+                    content=chunk.text,
+                    rules=rules
+                )
 
-            # 4. Send to Ollama
-            logger.info("Sending to Ollama for analysis...")
-            response = await ollama_service.generate_response(
-                prompt=prompt,
-                system_prompt="You are a compliance expert. Return ONLY valid JSON."
-            )
+                # Send to Ollama
+                response = await ollama_service.generate_response(
+                    prompt=prompt,
+                    system_prompt="You are a compliance expert. Return ONLY valid JSON."
+                )
 
-            # 5. Parse response
-            logger.info("Parsing Ollama response...")
-            analysis_result = ComplianceEngine._parse_ollama_response(response)
+                # Parse response
+                analysis_result = ComplianceEngine._parse_ollama_response(response)
+                
+                # Attach chunk reference to each violation
+                for violation_data in analysis_result["violations"]:
+                    # Build location string with chunk reference
+                    location = f"chunk:{chunk.id}"
+                    
+                    # Add metadata info if available
+                    if chunk.metadata.get("page_number"):
+                        location += f":page:{chunk.metadata['page_number']}"
+                    elif chunk.metadata.get("char_offset_start") is not None:
+                        location += f":offset:{chunk.metadata['char_offset_start']}"
+                    
+                    violation_data["location"] = location
+                    violation_data["chunk_index"] = chunk.chunk_index
+                    
+                all_violations.extend(analysis_result["violations"])
 
             # 6. Calculate scores (Phase 2: Pass DB session for rule-based scoring)
-            scores = scoring_service.calculate_scores(analysis_result["violations"], db=db)
+            scores = scoring_service.calculate_scores(all_violations, db=db)
 
             # 7. Store results
             compliance_check = ComplianceCheck(
@@ -108,13 +135,13 @@ Analyze the following content against these compliance rules:
                 seo_score=scores["seo"],
                 status=scores["status"],
                 grade=scores["grade"],
-                ai_summary=analysis_result.get("overall_assessment", "")
+                ai_summary=f"Analyzed {len(chunks)} chunk(s). {analysis_result.get('overall_assessment', '')}"
             )
             db.add(compliance_check)
             db.flush()
 
             # Store violations
-            for violation_data in analysis_result["violations"]:
+            for violation_data in all_violations:
                 # Find rule by ID (if provided)
                 rule = None
                 if violation_data.get("rule_id"):
@@ -137,7 +164,7 @@ Analyze the following content against these compliance rules:
                 db.add(violation)
 
             # Update submission status
-            submission.status = "completed"
+            submission.status = "analyzed"
             db.commit()
 
             logger.info(f"Analysis complete. Score: {scores['overall']}, Status: {scores['status']}")

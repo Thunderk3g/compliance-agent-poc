@@ -58,7 +58,7 @@ async def upload_submission(
             content_type=content_type,
             original_content=parsed_content,
             file_path=file_path,
-            status="pending"
+            status="uploaded"  # NEW STATUS for chunked workflow
         )
 
         db.add(submission)
@@ -125,7 +125,14 @@ async def analyze_submission(
     submission_id: uuid.UUID,
     db: Session = Depends(get_db)
 ):
-    """Trigger compliance analysis for a submission."""
+    """
+    Trigger compliance analysis for a submission (CHUNK-AWARE).
+    
+    **Workflow**:
+    1. Auto-preprocess if not already chunked
+    2. Run compliance analysis on chunks
+    3. Return results
+    """
     submission = db.query(Submission).filter(Submission.id == submission_id).first()
 
     if not submission:
@@ -134,8 +141,19 @@ async def analyze_submission(
     if submission.status == "analyzing":
         raise HTTPException(400, "Analysis already in progress")
 
-    # Trigger analysis (async in background in production)
     try:
+        # Auto-preprocess if status is 'uploaded' (not yet chunked)
+        if submission.status == "uploaded":
+            from ...services.preprocessing_service import PreprocessingService
+            preprocessing_service = PreprocessingService(db)
+            
+            chunks_created = await preprocessing_service.preprocess_submission(
+                submission_id=submission_id
+            )
+            
+            db.refresh(submission)
+        
+        # Run compliance analysis (chunk-aware)
         await compliance_engine.analyze_submission(str(submission_id), db)
 
         return {

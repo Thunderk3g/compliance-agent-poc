@@ -179,4 +179,17 @@ export const api = {
 
   syncDeepAnalysisResults: (submissionId: string) =>
     apiClient.post(`/api/compliance/${submissionId}/deep-analysis/sync`),
+
+  // Phase 3: Chunked Content Processing
+  getPreprocessingStats: () =>
+    apiClient.get('/api/dashboard/preprocessing-stats'),
+
+  getSubmissionChunks: (submissionId: string) =>
+    apiClient.get(`/api/preprocessing/${submissionId}/chunks`),
+
+  getPreprocessingStatus: (submissionId: string) =>
+    apiClient.get(`/api/preprocessing/${submissionId}/status`),
+
+  triggerPreprocessing: (submissionId: string, params?: { chunk_size?: number; overlap?: number }) =>
+    apiClient.post(`/api/preprocessing/${submissionId}`, params),
 };

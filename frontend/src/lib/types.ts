@@ -2,7 +2,9 @@ export interface Submission {
   id: string;
   title: string;
   content_type: 'html' | 'markdown' | 'pdf' | 'docx';
-  status: 'pending' | 'analyzing' | 'completed' | 'failed';
+  // Updated for chunked workflow: uploaded → preprocessing → preprocessed → analyzing → analyzed
+  // Legacy statuses: pending, completed, failed still supported
+  status: 'pending' | 'uploaded' | 'preprocessing' | 'preprocessed' | 'analyzing' | 'analyzed' | 'completed' | 'failed';
   submitted_at: string;
   submitted_by?: string;
   has_deep_analysis?: boolean;
@@ -218,3 +220,50 @@ export const SEVERITY_PRESETS = {
   balanced: { critical: 1.5, high: 1.0, medium: 0.5, low: 0.2 },
   lenient: { critical: 1.0, high: 0.5, medium: 0.2, low: 0.1 },
 };
+
+// Phase 3: Chunked Content Processing Types
+export interface ContentChunk {
+  id: string;
+  submission_id: string;
+  chunk_index: number;
+  text: string;
+  token_count: number;
+  metadata: {
+    source_type?: string;
+    page_number?: number;
+    section_title?: string;
+    char_offset_start?: number;
+    char_offset_end?: number;
+    chunk_method?: string;
+    synthetic?: boolean;
+    legacy_mode?: boolean;
+  };
+  created_at: string;
+}
+
+export interface PreprocessingStats {
+  total_submissions: number;
+  preprocessed_submissions: number;
+  total_chunks: number;
+  avg_chunks_per_submission: number;
+  by_content_type: {
+    pdf: number;
+    docx: number;
+    html: number;
+    markdown: number;
+  };
+  recent_preprocessing: Array<{
+    submission_id: string;
+    title: string;
+    chunks_created: number;
+    preprocessed_at: string;
+  }>;
+}
+
+export interface ChunkListResponse {
+  submission_id: string;
+  submission_title: string;
+  submission_status: string;
+  total_chunks: number;
+  chunks: ContentChunk[];
+}

@@ -86,8 +86,17 @@ export const Submissions: React.FC = () => {
 
   const getStatusBadge = (status: string) => {
     const colors: Record<string, string> = {
+      // Legacy statuses
       pending: 'bg-yellow-100 text-yellow-800',
+
+      // New chunked workflow statuses
+      uploaded: 'bg-yellow-100 text-yellow-800',
+      preprocessing: 'bg-indigo-100 text-indigo-800',
+      preprocessed: 'bg-purple-100 text-purple-800',
       analyzing: 'bg-blue-100 text-blue-800',
+      analyzed: 'bg-green-100 text-green-800',
+
+      // Legacy completed status
       completed: 'bg-green-100 text-green-800',
       failed: 'bg-red-100 text-red-800',
     };
@@ -166,30 +175,50 @@ export const Submissions: React.FC = () => {
                   {format(new Date(submission.submitted_at), 'MMM dd, yyyy')}
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
-                  {submission.status === 'pending' && (
+                  <div className="flex gap-2">
+                    {/* Show Analyze button for uploaded, preprocessed, or legacy pending status */}
+                    {(submission.status === 'uploaded' ||
+                      submission.status === 'preprocessed' ||
+                      submission.status === 'pending') && (
+                        <button
+                          onClick={() => handleAnalyze(submission.id)}
+                          disabled={actionLoading[submission.id]}
+                          className={`font-medium px-3 py-1 rounded ${actionLoading[submission.id]
+                            ? 'bg-blue-100 text-blue-400 cursor-not-allowed'
+                            : 'bg-blue-600 text-white hover:bg-blue-700'}`}
+                        >
+                          {actionLoading[submission.id] ? 'Analyzing...' : 'Analyze'}
+                        </button>
+                      )}
+
+                    {/* Show progress for preprocessing/analyzing */}
+                    {(submission.status === 'preprocessing' || submission.status === 'analyzing') && (
+                      <span className="text-blue-600 font-medium px-3 py-1">
+                        {submission.status === 'preprocessing' ? 'Chunking...' : 'Analyzing...'}
+                      </span>
+                    )}
+
+                    {/* Show View Results for analyzed or completed */}
+                    {(submission.status === 'analyzed' || submission.status === 'completed') && (
+                      <button
+                        onClick={() => navigate(`/results/${submission.id}`)}
+                        className="bg-green-600 text-white hover:bg-green-700 font-medium px-3 py-1 rounded"
+                      >
+                        View Results
+                      </button>
+                    )}
+
+                    {/* Delete button always available */}
                     <button
-                      onClick={() => handleAnalyze(submission.id)}
+                      onClick={() => handleDelete(submission.id)}
                       disabled={actionLoading[submission.id]}
-                      className={`font-medium ${actionLoading[submission.id] ? 'text-blue-400 cursor-not-allowed' : 'text-blue-600 hover:text-blue-800'}`}
+                      className={`font-medium px-3 py-1 rounded ${actionLoading[submission.id]
+                        ? 'bg-red-100 text-red-400 cursor-not-allowed'
+                        : 'bg-red-600 text-white hover:bg-red-700'}`}
                     >
-                      {actionLoading[submission.id] ? 'Analyzing...' : 'Analyze'}
+                      {actionLoading[submission.id] ? 'Deleting...' : 'Delete'}
                     </button>
-                  )}
-                  {submission.status === 'completed' && (
-                    <button
-                      onClick={() => navigate(`/results/${submission.id}`)}
-                      className="text-blue-600 hover:text-blue-800 font-medium"
-                    >
-                      View Results
-                    </button>
-                  )}
-                  <button
-                    onClick={() => handleDelete(submission.id)}
-                    disabled={actionLoading[submission.id]}
-                    className={`font-medium ml-4 ${actionLoading[submission.id] ? 'text-red-400 cursor-not-allowed' : 'text-red-600 hover:text-red-800'}`}
-                  >
-                    {actionLoading[submission.id] ? 'Deleting...' : 'Delete'}
-                  </button>
+                  </div>
                 </td>
               </tr>
             ))}

@@ -279,7 +279,6 @@ async def stream_deep_analysis(
             # Create record
             deep_record = DeepAnalysis(
                 check_id=check.id,
-                submission_id=submission.id,
                 total_lines=total,
                 document_title=submission.title,
                 severity_config_snapshot=config_snapshot,
@@ -435,22 +434,22 @@ async def export_deep_analysis_report(
     """
     Generate and download a DOCX report for the deep compliance analysis.
     """
-    # Get submission title
-    submission = db.query(Submission).filter(Submission.id == submission_id).first()
-    if not submission:
-        raise HTTPException(404, "Submission not found")
-        
-    # Get deep analysis results
-    result = await deep_analysis_service.get_deep_analysis_results(
-        submission_id=submission_id,
-        db=db
-    )
-    
-    if not result:
-        raise HTTPException(404, "No deep analysis found. Run analysis first.")
-
-    # Generate HTML (Inline to avoid import issues)
     try:
+        # Get submission title
+        submission = db.query(Submission).filter(Submission.id == submission_id).first()
+        if not submission:
+            raise HTTPException(404, "Submission not found")
+            
+        # Get deep analysis results
+        result = await deep_analysis_service.get_deep_analysis_results(
+            submission_id=submission_id,
+            db=db
+        )
+        
+        if not result:
+            raise HTTPException(404, "No deep analysis found. Run analysis first.")
+
+        # Generate HTML (Inline to avoid import issues)
         # Build HTML content
         html_content = f"""
         <html>
@@ -521,6 +520,7 @@ async def export_deep_analysis_report(
                 "Content-Disposition": f"attachment; filename={filename}"
             }
         )
+    
     except Exception as e:
         raise HTTPException(500, f"Failed to generate report: {str(e)}")
 
@@ -564,15 +564,30 @@ async def sync_deep_analysis_results(
             
             for impact in impacts:
                 # Map RuleImpact to Violation
+                # Use AI to match Deep Analysis violations to existing database rules
+                from ...services.rule_matcher_service import rule_matcher_service
+                
+                violation_description = impact.get("violation_reason", "Violation detected via Deep Analysis")
+                category = impact.get("category", "unknown")
+                severity = impact.get("severity", "low")
+                
+                # Try to find matching rule using AI semantic matching
+                matched_rule_id = await rule_matcher_service.match_violation_to_rule(
+                    violation_description=violation_description,
+                    category=category,
+                    severity=severity,
+                    db=db
+                )
+                
                 violation_dict = {
                     "check_id": check.id,
-                    "rule_id": impact.get("rule_id"),
-                    "severity": impact.get("severity", "low"),
-                    "category": impact.get("category", "unknown"),
-                    "description": impact.get("violation_reason", "Violation detected via Deep Analysis"),
+                    "rule_id": matched_rule_id,  # AI-matched rule or None if no good match
+                    "severity": severity,
+                    "category": category,
+                    "description": violation_description,
                     "location": f"Line {line_number}",
                     "current_text": line_content.strip(),
-                    "suggested_fix": "Review compliance guidelines.", # AI doesn't provide fixes in deep mode yet
+                    "suggested_fix": "Review compliance guidelines.",
                     "is_auto_fixable": False
                 }
                 new_violations.append(violation_dict)
@@ -595,7 +610,16 @@ async def sync_deep_analysis_results(
         from ...services.scoring_service import scoring_service
         
         try:
+            logger.info(f"Calculating scores for {len(new_violations)} violations")
+            logger.debug(f"Sample violation: {new_violations[0] if new_violations else 'None'}")
+            
+            # CRITICAL FIX: The scoring service expects actual Violation objects or dicts with proper structure
+            # But new_violations is a list of dicts for insertion. We need to fetch the actual inserted violations.
+            # However, we haven't inserted them yet! So we pass the dicts, and scoring service will handle them.
             scores = scoring_service.calculate_scores(new_violations, db)
+            
+            logger.info(f"Calculated scores: IRDAI={scores['irdai']}, Brand={scores['brand']}, SEO={scores['seo']}")
+            
             check.irdai_score = scores["irdai"]
             check.brand_score = scores["brand"]
             check.seo_score = scores["seo"]
