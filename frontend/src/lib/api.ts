@@ -192,4 +192,31 @@ export const api = {
 
   triggerPreprocessing: (submissionId: string, params?: { chunk_size?: number; overlap?: number }) =>
     apiClient.post(`/api/preprocessing/${submissionId}`, params),
+
+  // Adaptive Compliance Engine: Onboarding
+  startOnboarding: (data: {
+    user_id: string;
+    industry: string;
+    brand_name: string;
+    brand_guidelines?: string;
+    analysis_scope: string[];
+    region?: string;
+  }) =>
+    apiClient.post('/api/onboarding/start', data),
+
+  getUserConfig: (userId: string) =>
+    apiClient.get(`/api/onboarding/${userId}/config`),
+
+  updateUserConfig: (
+    userId: string,
+    updates: { industry?: string; brand_name?: string; analysis_scope?: string[] }
+  ) => {
+    const params = new URLSearchParams();
+    if (updates.industry) params.append("industry", updates.industry);
+    if (updates.brand_name) params.append("brand_name", updates.brand_name);
+    if (updates.analysis_scope) {
+      updates.analysis_scope.forEach(scope => params.append("analysis_scope", scope));
+    }
+    return apiClient.put(`/api/onboarding/${userId}/config?${params}`);
+  },
 };

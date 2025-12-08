@@ -161,6 +161,159 @@ class OllamaService:
             "overall_assessment": "AI analysis service temporarily unavailable. Please try again later.",
             "key_issues": ["AI service unavailable"]
         })
+    
+    async def generate_rules_from_context(
+        self,
+        search_results: List[Dict[str, Any]],
+        industry: str,
+        scope: str
+    ) -> List[Dict[str, Any]]:
+        """
+        Generate structured compliance rules from search results.
+        
+        Used during onboarding to extract actionable rules from
+        regulatory documents and best practices.
+        
+        Args:
+            search_results: List of search results with title, snippet, url
+            industry: Industry context (e.g., "insurance")
+            scope: Rule scope ("regulatory", "brand", "seo")
+            
+        Returns:
+            List of rule dicts with category, severity, rule_text, keywords
+        """
+        # Map scope to category
+        category_map = {
+            "regulatory": "irdai",  # Can be made dynamic per industry
+            "brand": "brand",
+            "seo": "seo",
+            "qualitative": "brand"
+        }
+        category = category_map.get(scope, "irdai")
+        
+        # Build prompt for rule extraction
+        prompt = self._build_rule_extraction_prompt(
+            search_results=search_results,
+            industry=industry,
+            category=category
+        )
+        
+        system_prompt = (
+            "You are a compliance expert specializing in extracting structured rules "
+            "from regulatory documents and best practices. Return ONLY valid JSON."
+        )
+        
+        try:
+            response = await self.generate_response(
+                prompt=prompt,
+                system_prompt=system_prompt
+            )
+            
+            # Parse JSON response
+            rules = self._parse_rule_extraction_response(response, category)
+            
+            # Add source URLs
+            for i, rule in enumerate(rules):
+                if i < len(search_results):
+                    rule["source_url"] = search_results[i].get("url", "")
+            
+            logger.info(f"Generated {len(rules)} rules for {category} from {len(search_results)} sources")
+            
+            return rules
+            
+        except Exception as e:
+            logger.error(f"Rule generation failed: {str(e)}")
+            return []
+    
+    def _build_rule_extraction_prompt(
+        self,
+        search_results: List[Dict],
+        industry: str,
+        category: str
+    ) -> str:
+        """Build prompt for extracting rules from search results."""
+        # Format search results
+        sources = []
+        for i, result in enumerate(search_results[:5], 1):  # Limit to top 5
+            sources.append(
+                f"Source {i}:\n"
+                f"Title: {result.get('title', 'N/A')}\n"
+                f"Content: {result.get('snippet', 'N/A')}\n"
+            )
+        
+        sources_text = "\n\n".join(sources)
+        
+        return f"""Extract actionable compliance rules from the following sources for the {industry} industry.
+
+{sources_text}
+
+**Your task:**
+Extract 3-5 specific, actionable compliance rules from these sources.
+
+**Output Format (JSON only, no markdown):**
+[
+  {{
+    "rule_text": "Clear, specific compliance requirement",
+    "severity": "critical|high|medium|low",
+    "keywords": ["keyword1", "keyword2"],
+    "points_deduction": -20.0 (for critical) | -10.0 (high) | -5.0 (medium) | -2.0 (low),
+    "confidence_score": 0.0-1.0
+  }}
+]
+
+**Guidelines:**
+- Focus on specific, testable requirements
+- Extract exact language from sources where possible
+- Assign severity based on regulatory importance
+- Include relevant keywords for rule matching
+- Set high confidence (0.8+) for explicit regulations
+- Limit to 5 most important rules
+
+Return ONLY the JSON array, no other text.
+"""
+    
+    def _parse_rule_extraction_response(
+        self,
+        response: str,
+        category: str
+    ) -> List[Dict[str, Any]]:
+        """Parse LLM response into structured rules."""
+        try:
+            # Clean response (remove markdown if present)
+            if "```json" in response:
+                start = response.find("```json") + 7
+                end = response.find("```", start)
+                response = response[start:end].strip()
+            elif "```" in response:
+                start = response.find("```") + 3
+                end = response.find("```", start)
+                response = response[start:end].strip()
+            
+            rules_data = json.loads(response)
+            
+            # Ensure it's a list
+            if isinstance(rules_data, dict):
+                rules_data = [rules_data]
+            
+            # Validate and add category
+            validated_rules = []
+            for rule in rules_data:
+                if "rule_text" in rule:
+                    validated_rules.append({
+                        "category": category,
+                        "rule_text": rule["rule_text"],
+                        "severity": rule.get("severity", "medium"),
+                        "keywords": rule.get("keywords", []),
+                        "points_deduction": rule.get("points_deduction", -5.0),
+                        "confidence_score": rule.get("confidence_score", 0.7)
+                    })
+            
+            return validated_rules
+            
+        except json.JSONDecodeError as e:
+            logger.error(f"Failed to parse rule extraction response: {str(e)}")
+            logger.debug(f"Response was: {response[:500]}")
+            return []
 
     async def analyze_line_for_violations(
         self,
