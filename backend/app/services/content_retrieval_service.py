@@ -100,8 +100,12 @@ class ContentRetrievalService:
         # Estimate token count (rough approximation)
         token_count = len(truncated_content.split())
         
+        # Use DETERMINISTIC UUID based on submission ID
+        # This ensures that subsequent calls (e.g., from frontend) get the same ID
+        synthetic_id = uuid.uuid5(uuid.NAMESPACE_OID, str(submission.id))
+        
         synthetic_chunk = ChunkDTO(
-            id=uuid.uuid4(),  # Temporary non-persisted ID
+            id=synthetic_id,
             text=truncated_content,
             chunk_index=0,
             token_count=token_count,

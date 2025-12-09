@@ -3,10 +3,10 @@
  * Displays comprehensive compliance analysis with interactive charts and PDF modification
  */
 
-import React, { useEffect, useState, useMemo } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { api } from '../lib/api';
-import { ComplianceCheck, Submission } from '../lib/types';
+import { ComplianceCheck, Submission, ContentChunk } from '../lib/types';
 
 // Analytics Components
 import ScoreComparisonRadar from '../components/results/analytics/ScoreComparisonRadar';
@@ -15,11 +15,14 @@ import SeverityHeatmap from '../components/results/analytics/SeverityHeatmap';
 import AutoFixabilityAnalysis from '../components/results/analytics/AutoFixabilityAnalysis';
 import PDFModificationPanel from '../components/results/PDFModificationPanel';
 import { DeepAnalysisPanel } from '../components/compliance';
+import { ChunkViewer } from '../components/compliance/ChunkViewer';
+import { parseChunkLocation, isChunkBasedLocation } from '../utils/ChunkLocationParser';
 
 export const Results: React.FC = () => {
   const { id } = useParams<{ id: string }>();
   const [results, setResults] = useState<ComplianceCheck | null>(null);
   const [submission, setSubmission] = useState<Submission | null>(null);
+  const [chunks, setChunks] = useState<Map<string, ContentChunk>>(new Map());
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<'overview' | 'violations' | 'deep-research'>('overview');
@@ -40,10 +43,30 @@ export const Results: React.FC = () => {
       const resultsResponse = await api.getComplianceResults(id!);
       setResults(resultsResponse.data);
 
-      // Fetch submission details for PDF functionality
+      // Fetch submission details for PDF functionality and chunk info
       try {
         const submissionResponse = await api.getSubmissionById(id!);
         setSubmission(submissionResponse.data);
+
+        // Fetch chunks if submission has been preprocessed
+        if (submissionResponse.data.status === 'preprocessed' ||
+          submissionResponse.data.status === 'analyzed') {
+          try {
+            const chunksResponse = await api.getSubmissionChunks(id!);
+            const chunksData: ContentChunk[] = chunksResponse.data.chunks || [];
+
+            // Store chunks in map for quick lookup
+            const chunksMap = new Map<string, ContentChunk>();
+            chunksData.forEach(chunk => {
+              chunksMap.set(chunk.id, chunk);
+            });
+            setChunks(chunksMap);
+
+            console.log(`Loaded ${chunksData.length} chunks for submission`);
+          } catch (chunkErr) {
+            console.warn('Could not fetch chunks:', chunkErr);
+          }
+        }
       } catch (err) {
         console.warn('Could not fetch submission details:', err);
       }
@@ -451,33 +474,65 @@ export const Results: React.FC = () => {
                         {violation.description}
                       </p>
 
-                      {/* Location */}
+                      {/* Location - Enhanced for Chunk Display */}
                       {violation.location && (
-                        <div className="mb-3 flex items-start space-x-2">
-                          <svg
-                            className="w-4 h-4 text-gray-600 mt-0.5 flex-shrink-0"
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
-                            />
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              strokeWidth={2}
-                              d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
-                            />
-                          </svg>
-                          <p className="text-sm text-gray-700">
-                            <span className="font-medium">Location:</span>{' '}
-                            {violation.location}
-                          </p>
-                        </div>
+                        <>
+                          {isChunkBasedLocation(violation.location) ? (
+                            // Chunk-based location: Render ChunkViewer
+                            <div className="mb-3">
+                              <p className="text-xs font-semibold text-gray-700 mb-2 uppercase tracking-wide flex items-center">
+                                <svg
+                                  className="w-4 h-4 mr-1 text-blue-600"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  viewBox="0 0 24 24"
+                                >
+                                  <path
+                                    strokeLinecap="round"
+                                    strokeLinejoin="round"
+                                    strokeWidth={2}
+                                    d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
+                                  />
+                                </svg>
+                                Violation Location (Chunk Content):
+                              </p>
+                              <ChunkViewer
+                                chunkId={parseChunkLocation(violation.location).chunkId!}
+                                submissionId={results.submission_id}
+                                violations={[violation]}
+                                showMetadata={true}
+                                className="mt-2"
+                              />
+                            </div>
+                          ) : (
+                            // Legacy location: Display as before
+                            <div className="mb-3 flex items-start space-x-2">
+                              <svg
+                                className="w-4 h-4 text-gray-600 mt-0.5 flex-shrink-0"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"
+                                />
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth={2}
+                                  d="M15 11a3 3 0 11-6 0 3 3 0 016 0z"
+                                />
+                              </svg>
+                              <p className="text-sm text-gray-700">
+                                <span className="font-medium">Location:</span>{' '}
+                                {violation.location}
+                              </p>
+                            </div>
+                          )}
+                        </>
                       )}
 
                       {/* Current Text */}
@@ -576,8 +631,8 @@ export const Results: React.FC = () => {
                 }}
                 disabled={isSyncing}
                 className={`flex items-center gap-2 px-6 py-3 border-2 rounded-xl font-semibold transition-all shadow-sm ${isSyncing
-                    ? 'bg-indigo-400 border-indigo-400 cursor-not-allowed'
-                    : 'bg-indigo-600 border-indigo-600 hover:bg-indigo-700 text-white'
+                  ? 'bg-indigo-400 border-indigo-400 cursor-not-allowed'
+                  : 'bg-indigo-600 border-indigo-600 hover:bg-indigo-700 text-white'
                   }`}
               >
                 {isSyncing ? (

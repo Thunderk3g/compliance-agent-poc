@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import Optional
 from uuid import UUID
+from datetime import datetime
 import logging
 
 from ...database import get_db
@@ -108,10 +109,10 @@ async def get_submission_chunks(
     """
     Retrieve all chunks for a submission.
     
-    **Use cases**:
-    - Debugging chunk boundaries
-    - Admin inspection
-    - Frontend chunk-based rendering
+    **Unified Access**:
+    - Returns real chunks if submission is preprocessed
+    - Returns synthetic chunk if submission is legacy/unpreprocessed
+    - Ensures frontend can always display "chunk" content
     """
     submission = db.query(Submission).filter_by(id=submission_id).first()
     if not submission:
@@ -120,26 +121,30 @@ async def get_submission_chunks(
             detail=f"Submission {submission_id} not found"
         )
     
-    chunks = db.query(ContentChunk).filter_by(
-        submission_id=submission_id
-    ).order_by(ContentChunk.chunk_index).all()
+    # Use consolidated retrieval service
+    service = ContentRetrievalService(db)
+    chunk_dtos = service.get_analyzable_content(submission_id, include_metadata=True)
+    
+    # helper to get timestamp (real or fallback)
+    base_time = submission.submitted_at or datetime.utcnow()
     
     return ChunkListResponse(
         submission_id=submission_id,
         submission_title=submission.title,
         submission_status=submission.status,
-        total_chunks=len(chunks),
+        total_chunks=len(chunk_dtos),
         chunks=[
             ContentChunkResponse(
-                id=chunk.id,
-                submission_id=chunk.submission_id,
-                chunk_index=chunk.chunk_index,
-                text=chunk.text,
-                token_count=chunk.token_count,
-                metadata=chunk.chunk_metadata,
-                created_at=chunk.created_at
+                id=c.id,
+                submission_id=submission_id,
+                chunk_index=c.chunk_index,
+                text=c.text,
+                token_count=c.token_count,
+                # Ensure metadata is compatible
+                metadata=c.metadata,
+                created_at=base_time
             )
-            for chunk in chunks
+            for c in chunk_dtos
         ]
     )
 
