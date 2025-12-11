@@ -34,6 +34,12 @@ async def get_current_user_id(
             detail="User ID header (X-User-Id) is required"
         )
 
+    if not x_user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User ID header (X-User-Id) is required"
+        )
+
     try:
         user_id = uuid.UUID(x_user_id)
         # POC: Auto-provision user if they don't exist
