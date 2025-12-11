@@ -67,12 +67,22 @@ async def preprocess_submission(
                 message="Submission already preprocessed"
             )
         
-        # Run preprocessing
+        # Run preprocessing with token-based parameters
         service = PreprocessingService(db)
+        
+        # Use chunk_tokens/overlap_tokens with proper defaults
+        chunk_tokens_value = request.chunk_tokens or request.chunk_size or 900
+        overlap_tokens_value = request.overlap_tokens or request.overlap or 200
+        
+        logger.info(
+            f"🔧 FIXED PARAMS: chunk_tokens={chunk_tokens_value}, "
+            f"overlap_tokens={overlap_tokens_value}"
+        )
+        
         chunks_created = await service.preprocess_submission(
             submission_id=submission_id,
-            chunk_size=request.chunk_size,
-            overlap=request.overlap
+            chunk_tokens=chunk_tokens_value,
+            overlap_tokens=overlap_tokens_value
         )
         
         # Refresh submission to get updated status
@@ -121,9 +131,15 @@ async def get_submission_chunks(
             detail=f"Submission {submission_id} not found"
         )
     
-    # Use consolidated retrieval service
-    service = ContentRetrievalService(db)
-    chunk_dtos = service.get_analyzable_content(submission_id, include_metadata=True)
+    # Serve real token chunks directly from DB — no synthetic fallback
+    chunks = (
+        db.query(ContentChunk)
+        .filter(ContentChunk.submission_id == submission_id)
+        .order_by(ContentChunk.chunk_index)
+        .all()
+    )
+    
+    logger.info(f"✅ Served {len(chunks)} REAL token chunks with metadata")
     
     # helper to get timestamp (real or fallback)
     base_time = submission.submitted_at or datetime.utcnow()
@@ -132,7 +148,7 @@ async def get_submission_chunks(
         submission_id=submission_id,
         submission_title=submission.title,
         submission_status=submission.status,
-        total_chunks=len(chunk_dtos),
+        total_chunks=len(chunks),
         chunks=[
             ContentChunkResponse(
                 id=c.id,
@@ -140,11 +156,10 @@ async def get_submission_chunks(
                 chunk_index=c.chunk_index,
                 text=c.text,
                 token_count=c.token_count,
-                # Ensure metadata is compatible
-                metadata=c.metadata,
-                created_at=base_time
+                metadata=c.chunk_metadata,  # FULL TOKEN METADATA
+                created_at=c.created_at or base_time
             )
-            for c in chunk_dtos
+            for c in chunks
         ]
     )
 
