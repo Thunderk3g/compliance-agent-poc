@@ -145,7 +145,7 @@ If no rule is semantically similar (confidence < 0.7), set matched_rule_index to
     ) -> Optional[Dict]:
         """Parse AI response and extract matched rule."""
         try:
-            # Extract JSON from response
+            # Extract JSON from response    
             response_text = response_text.strip()
             
             # Handle markdown code blocks

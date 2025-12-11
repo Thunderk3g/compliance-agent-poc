@@ -9,6 +9,19 @@ export const apiClient = axios.create({
   },
 });
 
+// Add request interceptor to inject User ID
+apiClient.interceptors.request.use((config) => {
+  let userId = localStorage.getItem('userId');
+  if (!userId || userId === 'demo-user-id') {
+    // Generate or use default valid UUID for demo
+    userId = '550e8400-e29b-41d4-a716-446655440000';
+    localStorage.setItem('userId', userId);
+  }
+  console.log('[API] Injecting X-User-Id:', userId);
+  config.headers['X-User-Id'] = userId;
+  return config;
+});
+
 export const api = {
   // Submissions
   uploadSubmission: (data: FormData) =>
@@ -219,4 +232,24 @@ export const api = {
     }
     return apiClient.put(`/api/onboarding/${userId}/config?${params}`);
   },
+  // Phase 1: Project System
+  createProject: (data: { name: string; description: string }) =>
+    apiClient.post('/api/projects/', data),
+
+  getProjects: () =>
+    apiClient.get('/api/projects/'),
+
+  getProject: (projectId: string) =>
+    apiClient.get(`/api/projects/${projectId}`),
+
+  uploadGuideline: (projectId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiClient.post(`/api/projects/${projectId}/guidelines`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+  },
+
+  getProjectGuidelines: (projectId: string) =>
+    apiClient.get(`/api/projects/${projectId}/guidelines`),
 };

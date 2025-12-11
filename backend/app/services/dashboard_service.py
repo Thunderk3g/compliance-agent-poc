@@ -1,5 +1,5 @@
 """Dashboard analytics service for aggregated compliance data."""
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 from datetime import datetime, timedelta
 from sqlalchemy.orm import Session
 from sqlalchemy import func, case, desc, cast, Date
@@ -233,6 +233,103 @@ class DashboardService:
         except Exception as e:
             logger.error(f"Error fetching top violations: {str(e)}")
             return []
+
+
+    def get_preprocessing_stats(self, db: Session) -> Dict[str, Any]:
+        """Get preprocessing and chunking statistics.
+        
+        Returns:
+            Dict containing:
+            - total_submissions
+            - preprocessed_count
+            - total_chunks
+            - recent_activity list
+        """
+        try:
+            from ..models.submission import Submission
+            from ..models.content_chunk import ContentChunk
+            
+            # Count total submissions
+            total_submissions = db.query(func.count(Submission.id)).scalar() or 0
+            
+            # Count total chunks
+            total_chunks = db.query(func.count(ContentChunk.id)).scalar() or 0
+
+            # Get recent preprocessing activity
+            # Submissions that have chunks, ordered by creation time
+            recent_activity = db.query(
+                Submission.id,
+                Submission.title,
+                Submission.status,
+                Submission.submitted_at,
+                func.count(ContentChunk.id).label('chunk_count')
+            ).join(
+                ContentChunk, Submission.id == ContentChunk.submission_id
+            ).group_by(
+                Submission.id, Submission.title, Submission.status, Submission.submitted_at
+            ).order_by(
+                desc(Submission.submitted_at)
+            ).limit(5).all()
+
+            # Count preprocessed submissions (status='preprocessed' or 'analyzed')
+            preprocessed_count = db.query(func.count(Submission.id)).filter(
+                Submission.status.in_(['preprocessed', 'analyzing', 'analyzed'])
+            ).scalar() or 0
+            
+            # Calculate content type distribution for preprocessed submissions
+            # We count chunks by their submission's content type
+            content_type_stats = db.query(
+                Submission.content_type,
+                func.count(Submission.id).label('count')
+            ).join(
+                ContentChunk, Submission.id == ContentChunk.submission_id
+            ).group_by(
+                Submission.content_type
+            ).all()
+            
+            by_content_type = {
+                "pdf": 0,
+                "docx": 0,
+                "html": 0,
+                "markdown": 0
+            }
+            
+            for ct_stat in content_type_stats:
+                ctype = ct_stat.content_type.lower()
+                if ctype in by_content_type:
+                    by_content_type[ctype] = ct_stat.count
+                elif ctype == 'md':
+                    by_content_type['markdown'] = ct_stat.count
+
+            recent_list = [
+                {
+                    "submission_id": str(item.id),
+                    "title": item.title,
+                    "status": item.status,
+                    "preprocessed_at": item.submitted_at.isoformat() if item.submitted_at else None,
+                    "chunks_created": item.chunk_count
+                }
+                for item in recent_activity
+            ]
+            
+            return {
+                "total_submissions": total_submissions,
+                "preprocessed_count": preprocessed_count,
+                "total_chunks": total_chunks,
+                "avg_chunks_per_doc": round(total_chunks / preprocessed_count, 1) if preprocessed_count > 0 else 0,
+                "by_content_type": by_content_type,
+                "recent_preprocessing": recent_list
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching preprocessing stats: {str(e)}")
+            return {
+                "total_submissions": 0,
+                "preprocessed_count": 0,
+                "total_chunks": 0,
+                "avg_chunks_per_doc": 0,
+                "recent_preprocessing": []
+            }
 
 
 # Singleton instance

@@ -38,6 +38,17 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     }
 
 
+
+@router.get("/preprocessing-stats")
+def get_preprocessing_stats(db: Session = Depends(get_db)):
+    """Get preprocessing analytics stats.
+    
+    Returns:
+        JSON with total submissions, chunk counts, and recent activity.
+    """
+    return dashboard_service.get_preprocessing_stats(db)
+
+
 @router.get("/recent", response_model=List[SubmissionResponse])
 def get_recent_submissions(
     limit: int = 10,

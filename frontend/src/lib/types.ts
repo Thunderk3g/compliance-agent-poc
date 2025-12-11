@@ -25,6 +25,19 @@ export interface ComplianceCheck {
   violations: Violation[];
 }
 
+export interface ViolationsBySeverity {
+  critical: number;
+  high: number;
+  medium: number;
+  low: number;
+}
+
+export interface ViolationsByCategory {
+  irdai: number;
+  brand: number;
+  seo: number;
+}
+
 export interface Violation {
   id: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
@@ -266,4 +279,26 @@ export interface ChunkListResponse {
   submission_status: string;
   total_chunks: number;
   chunks: ContentChunk[];
+}
+
+// Phase 1: Project System Types
+export interface Project {
+  id: string;
+  name: string;
+  description?: string;
+  created_by: string;
+  created_at?: string;
+}
+
+export interface Guideline {
+  id: string;
+  project_id: string;
+  title: string;
+  content?: string;
+  file_path?: string;
+  created_at: string;
+}
+
+export interface ProjectListResponse {
+  projects: Project[];
 }

@@ -35,7 +35,25 @@ async def get_current_user_id(
         )
 
     try:
-        return uuid.UUID(x_user_id)
+        user_id = uuid.UUID(x_user_id)
+        # POC: Auto-provision user if they don't exist
+        # This prevents ForeignKey errors when using hardcoded/dev user IDs
+        db = next(get_db())
+        try:
+            user = db.query(User).filter(User.id == user_id).first()
+            if not user:
+                user = User(
+                    id=user_id,
+                    name="Default User",
+                    email=f"user_{user_id}@example.com",
+                    role="super_admin" # Default to super_admin for POC
+                )
+                db.add(user)
+                db.commit()
+        finally:
+            db.close()
+            
+        return user_id
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api/submissions", tags=["submissions"])
 async def upload_submission(
     title: str = Form(...),
     content_type: str = Form(...),
+    project_id: uuid.UUID = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -58,7 +59,8 @@ async def upload_submission(
             content_type=content_type,
             original_content=parsed_content,
             file_path=file_path,
-            status="uploaded"  # NEW STATUS for chunked workflow
+            status="uploaded",  # NEW STATUS for chunked workflow
+            project_id=project_id
         )
 
         db.add(submission)

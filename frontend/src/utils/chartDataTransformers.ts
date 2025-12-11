@@ -2,7 +2,12 @@
  * Data transformation utilities for converting compliance data to chart formats
  */
 
-import { ComplianceCheck, Violation } from '../types';
+import {
+  ViolationsBySeverity,
+  ViolationsByCategory,
+  ComplianceCheck,
+  Violation
+} from '../lib/types';
 import {
   RadarChartData,
   DonutChartData,

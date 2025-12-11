@@ -7,18 +7,23 @@ import { Results } from './pages/Results';
 import AdminDashboard from './pages/AdminDashboard';
 import Onboarding from './pages/Onboarding';
 
+import ProjectList from './pages/ProjectList';
+import ProjectDetail from './pages/ProjectDetail';
+
 function App() {
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/onboarding" element={<Onboarding />} /> {/* Standalone onboarding */}
+        <Route path="/onboarding" element={<Onboarding />} />
         <Route path="/" element={<Layout />}>
-          <Route index element={<Dashboard />} />
-          <Route path="dashboard" element={<Dashboard />} />
+          <Route index element={<ProjectList />} />
+          <Route path="projects" element={<ProjectList />} />
+          <Route path="projects/:id" element={<ProjectDetail />} />
+          <Route path="global-stats" element={<Dashboard />} />
           <Route path="upload" element={<Upload />} />
           <Route path="submissions" element={<Submissions />} />
           <Route path="results/:id" element={<Results />} />
-          <Route path="admin" element={<AdminDashboard />} /> {/* Phase 2: Admin Dashboard */}
+          <Route path="admin" element={<AdminDashboard />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -83,8 +83,8 @@ Analyze the following content against these compliance rules:
             
             logger.info(f"Processing {len(chunks)} chunk(s) for analysis")
 
-            # 3. Load active rules
-            rules = ComplianceEngine._load_active_rules(db)
+            # 3. Load active rules (scoped to project)
+            rules = ComplianceEngine._load_active_rules(db, submission.project_id)
 
             # 4. Process each chunk
             all_violations = []
@@ -179,9 +179,20 @@ Analyze the following content against these compliance rules:
             raise
 
     @staticmethod
-    def _load_active_rules(db: Session) -> Dict[str, List[Rule]]:
-        """Load top 3 active rules per category by severity."""
-        rules = db.query(Rule).filter(Rule.is_active == True).all()
+    def _load_active_rules(db: Session, project_id: Any = None) -> Dict[str, List[Rule]]:
+        """Load top active rules per category, filtered by project."""
+        query = db.query(Rule).filter(Rule.is_active == True)
+        
+        if project_id:
+            # Fetch rules specific to this project
+            # Note: We could also include global rules (project_id is None) if desired,
+            # but for strict project isolation, we only fetch project rules.
+            query = query.filter(Rule.project_id == project_id)
+        else:
+            # Legacy/Global context: Fetch only global rules
+            query = query.filter(Rule.project_id.is_(None))
+            
+        rules = query.all()
 
         # Sort by severity weight (critical > high > medium > low)
         severity_order = {"critical": 4, "high": 3, "medium": 2, "low": 1}
@@ -194,7 +205,13 @@ Analyze the following content against these compliance rules:
         }
 
         for rule in rules:
-            if rule.category in grouped and len(grouped[rule.category]) < 3:
+            # If we haven't seen this category yet, initialize it
+            if rule.category not in grouped:
+                 grouped[rule.category] = []
+            
+            # Limit to top 5 rules per category for context window management
+            # (Increased from 3 to 5 for better coverage in project mode)
+            if len(grouped[rule.category]) < 5:
                 grouped[rule.category].append(rule)
 
         return grouped
