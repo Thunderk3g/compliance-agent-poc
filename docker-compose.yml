@@ -15,7 +15,7 @@ services:
     networks:
       - compliance-network
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U compliance_user -d compliance_db"]
+      test: [ "CMD-SHELL", "pg_isready -U compliance_user -d compliance_db" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,7 +28,7 @@ services:
     networks:
       - compliance-network
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -82,7 +82,7 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-      - uploads:/app/uploads  # Phase 2: Stores uploaded documents for rule generation
+      - uploads:/app/uploads # Phase 2: Stores uploaded documents for rule generation
     depends_on:
       postgres:
         condition: service_healthy
@@ -117,6 +117,7 @@ volumes:
   pgadmin_data:
   ollama_data:
   uploads:
+
 
 networks:
   compliance-network:

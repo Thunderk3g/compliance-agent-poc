@@ -83,12 +83,19 @@ async def start_onboarding(
     """
     try:
         # Verify user exists
+        # Verify user exists or create
         user = db.query(User).filter_by(id=request.user_id).first()
         if not user:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"User {request.user_id} not found"
+            logger.info(f"Creating new user {request.user_id}")
+            # Import uuid to generate random email if needed, or use ID
+            user = User(
+                id=request.user_id, 
+                name=f"User {str(request.user_id)[:4]}",
+                email=f"{request.user_id}@example.com", 
+                role="agent"
             )
+            db.add(user)
+            db.commit()
         
         logger.info(f"Starting onboarding for user {request.user_id}, industry: {request.industry}")
         

@@ -163,16 +163,12 @@ const SeverityHeatmap: React.FC<SeverityHeatmapProps> = ({
       },
       legend: {
         show: true,
-        position: 'bottom',
+        position: 'top',
+        horizontalAlign: 'right',
         fontSize: '11px',
         fontWeight: 500,
         labels: {
           colors: '#374151',
-        },
-        markers: {
-          width: 16,
-          height: 16,
-          radius: 2,
         },
       },
       responsive: [

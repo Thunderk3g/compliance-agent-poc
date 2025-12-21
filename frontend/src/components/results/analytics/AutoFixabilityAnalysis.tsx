@@ -74,11 +74,6 @@ const AutoFixabilityAnalysis: React.FC<AutoFixabilityAnalysisProps> = ({
         labels: {
           colors: '#374151',
         },
-        markers: {
-          width: 14,
-          height: 14,
-          radius: 3,
-        },
       },
       plotOptions: {
         pie: {
@@ -254,11 +249,6 @@ const AutoFixabilityAnalysis: React.FC<AutoFixabilityAnalysisProps> = ({
         fontWeight: 500,
         labels: {
           colors: '#374151',
-        },
-        markers: {
-          width: 12,
-          height: 12,
-          radius: 3,
         },
       },
       tooltip: {

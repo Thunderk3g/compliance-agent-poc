@@ -95,7 +95,12 @@ const OnboardingWizard: React.FC = () => {
 
         try {
             // Get user ID from localStorage or use demo user
-            const userId = localStorage.getItem('userId') || 'demo-user-id';
+            let userId = localStorage.getItem('userId');
+            // Fix for legacy invalid ID
+            if (!userId || userId === 'demo-user-id') {
+                userId = '550e8400-e29b-41d4-a716-446655440000';
+            }
+            localStorage.setItem('userId', userId); // Ensure it's persisted
 
             const response = await api.startOnboarding({
                 user_id: userId,
@@ -171,10 +176,10 @@ const OnboardingWizard: React.FC = () => {
                             <div key={num} className="flex items-center">
                                 <div
                                     className={`w-10 h-10 rounded-full flex items-center justify-center font-semibold transition-all ${num < step
-                                            ? 'bg-green-500 text-white'
-                                            : num === step
-                                                ? 'bg-indigo-600 text-white ring-4 ring-indigo-200'
-                                                : 'bg-gray-200 text-gray-500'
+                                        ? 'bg-green-500 text-white'
+                                        : num === step
+                                            ? 'bg-indigo-600 text-white ring-4 ring-indigo-200'
+                                            : 'bg-gray-200 text-gray-500'
                                         }`}
                                 >
                                     {num < step ? <CheckCircle className="w-5 h-5" /> : num}
@@ -222,8 +227,8 @@ const OnboardingWizard: React.FC = () => {
                                         key={industry.value}
                                         onClick={() => handleIndustrySelect(industry.value)}
                                         className={`p-6 rounded-xl border-2 transition-all text-left hover:shadow-lg ${formData.industry === industry.value
-                                                ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-200'
-                                                : 'border-gray-200 hover:border-indigo-300'
+                                            ? 'border-indigo-600 bg-indigo-50 ring-2 ring-indigo-200'
+                                            : 'border-gray-200 hover:border-indigo-300'
                                             }`}
                                     >
                                         <div className="flex items-start gap-4">
@@ -307,8 +312,8 @@ const OnboardingWizard: React.FC = () => {
                                         key={scope.value}
                                         onClick={() => handleScopeToggle(scope.value)}
                                         className={`p-6 rounded-xl border-2 transition-all text-left hover:shadow-lg ${formData.analysis_scope.includes(scope.value)
-                                                ? 'border-indigo-600 bg-indigo-50'
-                                                : 'border-gray-200 hover:border-indigo-300'
+                                            ? 'border-indigo-600 bg-indigo-50'
+                                            : 'border-gray-200 hover:border-indigo-300'
                                             }`}
                                     >
                                         <div className="flex items-start gap-4">
@@ -319,8 +324,8 @@ const OnboardingWizard: React.FC = () => {
                                             </div>
                                             <div
                                                 className={`w-6 h-6 rounded border-2 flex items-center justify-center flex-shrink-0 transition-all ${formData.analysis_scope.includes(scope.value)
-                                                        ? 'bg-indigo-600 border-indigo-600'
-                                                        : 'border-gray-300'
+                                                    ? 'bg-indigo-600 border-indigo-600'
+                                                    : 'border-gray-300'
                                                     }`}
                                             >
                                                 {formData.analysis_scope.includes(scope.value) && (

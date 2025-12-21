@@ -367,7 +367,7 @@ Full-featured admin dashboard with:
 **POC Implementation**:
 - Simple header-based auth: `X-User-Id` header
 - User roles: `agent`, `reviewer`, `super_admin`
-- All admin endpoints protected by `require_super_admin` dependency
+- All admin endpoints protected by ` ` dependency
 - Returns 403 Forbidden for non-super-admin users
 
 **Production TODO**: Replace with JWT/OAuth2

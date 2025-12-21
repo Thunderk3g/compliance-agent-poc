@@ -66,11 +66,6 @@ const ViolationDistributionCharts: React.FC<
         labels: {
           colors: '#374151',
         },
-        markers: {
-          width: 12,
-          height: 12,
-          radius: 3,
-        },
       },
       plotOptions: {
         pie: {

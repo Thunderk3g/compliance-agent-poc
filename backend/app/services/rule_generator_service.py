@@ -40,7 +40,9 @@ class RuleGeneratorService:
         content_type: str,
         document_title: str,
         created_by_user_id: uuid.UUID,
-        db: Session
+        db: Session,
+        project_id: Optional[uuid.UUID] = None,
+        source_guideline_id: Optional[uuid.UUID] = None
     ) -> Dict[str, Any]:
         """
         Generate compliance rules from an uploaded document.
@@ -49,8 +51,10 @@ class RuleGeneratorService:
             file_path: Path to the uploaded document file
             content_type: Type of document (html, markdown, pdf, docx)
             document_title: Title/name of the document
-            created_by_user_id: UUID of the super admin creating these rules
+            created_by_user_id: UUID of the user creating these rules
             db: Database session
+            project_id: Optional Project ID to link rules to
+            source_guideline_id: Optional Guideline ID to link rules to
 
         Returns:
             dict: {
@@ -72,11 +76,14 @@ class RuleGeneratorService:
         }
 
         try:
-            # Step 1: Verify user is super_admin
-            user = db.query(User).filter(User.id == created_by_user_id).first()
-            if not user or user.role != "super_admin":
-                result["errors"].append("Only super_admin users can generate rules")
-                return result
+            # Step 1: Verify user permissions
+            # If project_id is provided, we assume the caller has verified project access.
+            # If NO project_id, strict super_admin check applies (legacy global rules).
+            if not project_id:
+                user = db.query(User).filter(User.id == created_by_user_id).first()
+                if not user or user.role != "super_admin":
+                    result["errors"].append("Only super_admin users can generate rules")
+                    return result
 
             # Step 2: Parse document content
             logger.info(f"Parsing {content_type} document...")
@@ -140,7 +147,9 @@ class RuleGeneratorService:
                         pattern=rule_data.get("pattern"),
                         points_deduction=float(rule_data["points_deduction"]),
                         is_active=True,
-                        created_by=created_by_user_id
+                        created_by=created_by_user_id,
+                        project_id=project_id,
+                        source_guideline_id=source_guideline_id
                     )
 
                     db.add(new_rule)

@@ -6,5 +6,7 @@ from .rule import Rule
 from .deep_analysis import DeepAnalysis
 from .content_chunk import ContentChunk
 from .user_config import UserConfig
+from .project import Project
+from .guideline import Guideline
 
-__all__ = ["User", "Submission", "ComplianceCheck", "Violation", "Rule", "DeepAnalysis", "ContentChunk", "UserConfig"]
+__all__ = ["User", "Submission", "ComplianceCheck", "Violation", "Rule", "DeepAnalysis", "ContentChunk", "UserConfig", "Project", "Guideline"]
