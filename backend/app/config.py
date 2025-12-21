@@ -8,7 +8,7 @@ class Settings(BaseSettings):
 
     # Ollama
     ollama_base_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "qwen2.5:7b"
+    ollama_model: str = "0xroyce/plutus"
     ollama_timeout: int = 30
     ollama_max_retries: int = 3
 

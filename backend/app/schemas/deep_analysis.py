@@ -152,4 +152,4 @@ class DeepAnalysisSummary(BaseModel):
     average_score: float
     lines_with_violations: int
     severity_config: SeverityWeights
-    created_at: str
+    created_at: datetime

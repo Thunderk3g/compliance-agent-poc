@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File,
 from sqlalchemy.orm import Session
 from uuid import UUID
 from typing import List
+from datetime import datetime
 import shutil
 import os
 import uuid
@@ -133,7 +134,7 @@ def get_project(
 class GuidelineResponse(BaseModel):
     id: UUID
     title: str
-    created_at: str
+    created_at: datetime
 
     class Config:
         from_attributes = True
