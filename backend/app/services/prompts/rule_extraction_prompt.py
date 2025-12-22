@@ -100,6 +100,35 @@ def build_rule_extraction_prompt(
     }
 
 
+def build_rule_extraction_prompt_with_instructions(
+    document_title: str,
+    document_type: str,
+    document_content: str,
+    instructions: str = ""
+) -> dict:
+    """
+    Build the complete prompt for rule extraction with optional user instructions.
+    
+    Args:
+        document_title: Title/filename of the document
+        document_type: Type of document
+        document_content: Parsed text content
+        instructions: Optional specific focus instructions from user
+        
+    Returns:
+        dict with 'system_prompt' and 'user_prompt' keys
+    """
+    # Use standard builder first
+    prompt_data = build_rule_extraction_prompt(document_title, document_type, document_content)
+    
+    if instructions and instructions.strip():
+        # Append instructions to user prompt
+        additional_instruction = f"\n\nADDITIONAL INSTRUCTIONS:\n{instructions}\n\nPlease prioritize the above instructions when extracting rules."
+        prompt_data["user_prompt"] += additional_instruction
+        
+    return prompt_data
+
+
 # Validation schemas for extracted rules
 VALID_CATEGORIES = {"irdai", "brand", "seo"}
 VALID_SEVERITIES = {"critical", "high", "medium", "low"}

@@ -249,6 +249,10 @@ export const api = {
       headers: { 'Content-Type': 'multipart/form-data' }
     });
   },
+  deleteGuideline: (projectId: string, guidelineId: string) =>
+    apiClient.delete(`/api/projects/${projectId}/guidelines/${guidelineId}`),
+  improveRules: (projectId: string, guidelineId: string, instructions: string) =>
+    apiClient.post(`/api/projects/${projectId}/guidelines/${guidelineId}/improve-rules`, { instructions }),
 
   getProjectGuidelines: (projectId: string) =>
     apiClient.get(`/api/projects/${projectId}/guidelines`),

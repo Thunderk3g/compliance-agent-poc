@@ -2,7 +2,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
     ArrowLeft, FileText, Upload, Shield, AlertTriangle,
-    CheckCircle2, Plus, File, Loader2, Trash2, Filter, Search, ArrowRight, X
+    CheckCircle2, Plus, File, Loader2, Trash2, Filter, Search, ArrowRight, X, Sparkles, MessageSquare
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Results } from './Results';
@@ -44,6 +44,13 @@ export default function ProjectDetail() {
     const [filterCategory, setFilterCategory] = useState<string>('all');
     const [filterSeverity, setFilterSeverity] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState<string>('');
+
+    // Improve Rules Modal State
+    const [improveModalOpen, setImproveModalOpen] = useState(false);
+    const [selectedGuidelineId, setSelectedGuidelineId] = useState<string | null>(null);
+    const [improveInstructions, setImproveInstructions] = useState('');
+    const [isImproving, setIsImproving] = useState(false);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -158,6 +165,49 @@ export default function ProjectDetail() {
             case 'brand': return 'bg-green-100 text-green-800 border-green-200';
             case 'seo': return 'bg-cyan-100 text-cyan-800 border-cyan-200';
             default: return 'bg-gray-100 text-gray-800 border-gray-200';
+        }
+    };
+
+    // Guideline Actions
+    const handleDeleteGuideline = async (guidelineId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm('Are you sure? This will delete the guideline and all its generated rules.')) return;
+        if (!id) return;
+
+        try {
+            await api.deleteGuideline(id, guidelineId);
+            setUploadSuccess("Guideline deleted successfully");
+            setTimeout(() => setUploadSuccess(null), 3000);
+            fetchProjectData();
+        } catch (err) {
+            console.error("Failed to delete guideline:", err);
+            alert("Failed to delete guideline");
+        }
+    };
+
+    const openImproveModal = (guidelineId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setSelectedGuidelineId(guidelineId);
+        setImproveInstructions('');
+        setImproveModalOpen(true);
+    };
+
+    const handleImproveRules = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!id || !selectedGuidelineId) return;
+
+        setIsImproving(true);
+        try {
+            const res = await api.improveRules(id, selectedGuidelineId, improveInstructions);
+            setImproveModalOpen(false);
+            setUploadSuccess(`Success! Added ${res.data.rules_added} new rules.`);
+            setTimeout(() => setUploadSuccess(null), 5000);
+            fetchProjectData();
+        } catch (err) {
+            console.error("Failed to improve rules:", err);
+            alert("Failed to improve rules");
+        } finally {
+            setIsImproving(false);
         }
     };
 
@@ -367,7 +417,7 @@ export default function ProjectDetail() {
                         ) : (
                             <div className="grid gap-4">
                                 {guidelines.map(guide => (
-                                    <div key={guide.id} className="flex items-center justify-between p-4 bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow">
+                                    <div key={guide.id} className="flex items-center justify-between p-4 bg-white border rounded-lg shadow-sm hover:shadow-md transition-shadow group">
                                         <div className="flex items-center gap-4">
                                             <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
                                                 <FileText className="w-5 h-5" />
@@ -380,9 +430,25 @@ export default function ProjectDetail() {
                                                 </p>
                                             </div>
                                         </div>
-                                        <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200">
-                                            Active
-                                        </Badge>
+                                        <div className="flex items-center gap-2">
+                                            <button
+                                                onClick={(e) => openImproveModal(guide.id, e)}
+                                                className="px-3 py-1.5 text-xs font-medium text-purple-700 bg-purple-50 hover:bg-purple-100 rounded-lg transition-colors flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100"
+                                            >
+                                                <Sparkles className="w-3 h-3" />
+                                                Improve Rules
+                                            </button>
+                                            <button
+                                                onClick={(e) => handleDeleteGuideline(guide.id, e)}
+                                                className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-100 sm:opacity-0 group-hover:opacity-100"
+                                                title="Delete Guideline"
+                                            >
+                                                <Trash2 className="w-4 h-4" />
+                                            </button>
+                                            <Badge variant="outline" className="text-green-600 bg-green-50 border-green-200">
+                                                Active
+                                            </Badge>
+                                        </div>
                                     </div>
                                 ))}
                             </div>
@@ -637,6 +703,74 @@ export default function ProjectDetail() {
                     </div>
                 )}
             </div>
+            {/* Improve Rules Modal */}
+            {improveModalOpen && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden animate-scale-in">
+                        <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-purple-50/50">
+                            <div>
+                                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                    <Sparkles className="w-5 h-5 text-purple-600" />
+                                    Improve Rules
+                                </h3>
+                                <p className="text-sm text-gray-500 mt-1">Use AI to extract more specific rules.</p>
+                            </div>
+                            <button
+                                onClick={() => setImproveModalOpen(false)}
+                                className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                            >
+                                <X className="w-5 h-5" />
+                            </button>
+                        </div>
+
+                        <form onSubmit={handleImproveRules} className="p-6 space-y-4">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-1">
+                                    Instructions for AI
+                                </label>
+                                <textarea
+                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none min-h-[100px] resize-none"
+                                    placeholder="e.g. 'Focus on extracting rules related to payment timelines' or 'Find specific prohibitions regarding logos'"
+                                    value={improveInstructions}
+                                    onChange={(e) => setImproveInstructions(e.target.value)}
+                                    autoFocus
+                                />
+                                <p className="text-xs text-gray-500 mt-2 flex items-start gap-1">
+                                    <MessageSquare className="w-3 h-3 mt-0.5" />
+                                    <span>The AI will re-scan the document with these specific instructions to find additional rules.</span>
+                                </p>
+                            </div>
+
+                            <div className="flex items-center justify-end gap-3 pt-2">
+                                <button
+                                    type="button"
+                                    onClick={() => setImproveModalOpen(false)}
+                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={isImproving || !improveInstructions.trim()}
+                                    className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors shadow-sm"
+                                >
+                                    {isImproving ? (
+                                        <>
+                                            <Loader2 className="w-4 h-4 animate-spin" />
+                                            Processing...
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Sparkles className="w-4 h-4" />
+                                            Generate Rules
+                                        </>
+                                    )}
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

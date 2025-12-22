@@ -24,3 +24,6 @@ class GuidelineResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+class ImproveRulesRequest(BaseModel):
+    instructions: str

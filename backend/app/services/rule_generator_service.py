@@ -17,6 +17,7 @@ from .ollama_service import ollama_service
 from .content_parser import content_parser
 from .prompts.rule_extraction_prompt import (
     build_rule_extraction_prompt,
+    build_rule_extraction_prompt_with_instructions,
     validate_extracted_rule,
     VALID_CATEGORIES,
     VALID_SEVERITIES
@@ -42,7 +43,8 @@ class RuleGeneratorService:
         created_by_user_id: uuid.UUID,
         db: Session,
         project_id: Optional[uuid.UUID] = None,
-        source_guideline_id: Optional[uuid.UUID] = None
+        source_guideline_id: Optional[uuid.UUID] = None,
+        instructions: Optional[str] = None
     ) -> Dict[str, Any]:
         """
         Generate compliance rules from an uploaded document.
@@ -100,10 +102,11 @@ class RuleGeneratorService:
             logger.info(f"Parsed content length: {len(parsed_content)} characters")
 
             # Step 3: Build prompt for rule extraction
-            prompt_data = build_rule_extraction_prompt(
+            prompt_data = build_rule_extraction_prompt_with_instructions(
                 document_title=document_title,
                 document_type=content_type,
-                document_content=parsed_content
+                document_content=parsed_content,
+                instructions=instructions
             )
 
             # Step 4: Call Ollama for rule extraction

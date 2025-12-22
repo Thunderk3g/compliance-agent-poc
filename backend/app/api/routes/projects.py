@@ -11,6 +11,7 @@ from ..deps import get_current_user_id
 from ...services.project_service import ProjectService
 from ...services.rule_generator_service import rule_generator_service
 from ...models.guideline import Guideline
+from ...models.rule import Rule
 from ...config import settings
 from pydantic import BaseModel
 
@@ -85,7 +86,7 @@ async def upload_guideline(
         "errors": result["errors"]
     }
 
-from ...schemas.project import ProjectCreate, ProjectResponse, GuidelineResponse
+from ...schemas.project import ProjectCreate, ProjectResponse, GuidelineResponse, ImproveRulesRequest
 
 @router.post("/", response_model=ProjectResponse)
 def create_project(
@@ -133,3 +134,91 @@ def get_project_guidelines(
     
     # Assuming relationship exists, or query manually
     return db.query(Guideline).filter(Guideline.project_id == project_id).all()
+
+@router.delete("/{project_id}/guidelines/{guideline_id}")
+def delete_guideline(
+    project_id: UUID,
+    guideline_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    service = ProjectService(db)
+    project = service.get_project(project_id)
+    if not project or project.created_by != user_id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    guideline = db.query(Guideline).filter(
+        Guideline.id == guideline_id,
+        Guideline.project_id == project_id
+    ).first()
+
+    if not guideline:
+        raise HTTPException(status_code=404, detail="Guideline not found")
+
+    # Delete associated file
+    if os.path.exists(guideline.file_path):
+        try:
+            os.remove(guideline.file_path)
+        except OSError:
+            pass # Log error but continue
+
+    # Soft delete associated rules
+    rules = db.query(Rule).filter(Rule.source_guideline_id == guideline.id).all()
+    for rule in rules:
+        rule.is_active = False
+    
+    # Delete guideline record
+    db.delete(guideline)
+    db.commit()
+
+    return {"success": True, "message": "Guideline and associated rules deleted"}
+
+@router.post("/{project_id}/guidelines/{guideline_id}/improve-rules")
+async def improve_guideline_rules(
+    project_id: UUID,
+    guideline_id: UUID,
+    request: ImproveRulesRequest,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    service = ProjectService(db)
+    project = service.get_project(project_id)
+    if not project or project.created_by != user_id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    guideline = db.query(Guideline).filter(
+        Guideline.id == guideline_id,
+        Guideline.project_id == project_id
+    ).first()
+
+    if not guideline:
+        raise HTTPException(status_code=404, detail="Guideline not found")
+
+    # Determine content type from file extension
+    file_ext = os.path.splitext(guideline.file_path)[1].lower()
+    content_map = {
+        '.pdf': 'pdf',
+        '.docx': 'docx',
+        '.txt': 'markdown',
+        '.md': 'markdown',
+        '.html': 'html'
+    }
+    content_type = content_map.get(file_ext, 'text')
+
+    # Trigger rule generation with instructions
+    result = await rule_generator_service.generate_rules_from_document(
+        file_path=guideline.file_path,
+        content_type=content_type,
+        document_title=guideline.title,
+        created_by_user_id=user_id,
+        db=db,
+        project_id=project_id,
+        source_guideline_id=guideline_id,
+        instructions=request.instructions
+    )
+
+    return {
+        "success": result["success"],
+        "rules_added": result["rules_created"],
+        "errors": result["errors"]
+    }
