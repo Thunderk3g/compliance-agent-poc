@@ -58,13 +58,13 @@ services:
       - ollama_data:/root/.ollama
     networks:
       - compliance-network
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
 
   backend:
     build: ./backend
@@ -73,7 +73,7 @@ services:
       - DATABASE_URL=postgresql://compliance_user:compliance_pass@postgres:5432/compliance_db
       - REDIS_URL=redis://redis:6379/0
       - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_MODEL=0xroyce/plutus
+      - OLLAMA_MODEL=qwen2.5:7b
       - OLLAMA_TIMEOUT=160
       - OLLAMA_MAX_RETRIES=3
       - ENVIRONMENT=development

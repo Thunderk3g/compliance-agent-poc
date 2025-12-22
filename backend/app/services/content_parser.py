@@ -6,6 +6,13 @@ from bs4 import BeautifulSoup
 import markdown
 import logging
 
+import logging
+from docx.document import Document
+from docx.oxml.table import CT_Tbl
+from docx.oxml.text.paragraph import CT_P
+from docx.table import _Cell, Table
+from docx.text.paragraph import Paragraph
+
 logger = logging.getLogger(__name__)
 
 
@@ -81,14 +88,40 @@ class ContentParser:
         return '\n'.join(text)
 
     @staticmethod
+    def _iter_block_items(parent):
+        """
+        Generate a reference to each paragraph and table child within parent, in document order.
+        Each returned value is an instance of either Table or Paragraph.
+        """
+        if isinstance(parent, _Cell):
+            parent_elm = parent._tc
+        else:
+            parent_elm = parent.element.body
+
+        for child in parent_elm.iterchildren():
+            if isinstance(child, CT_P):
+                yield Paragraph(child, parent)
+            elif isinstance(child, CT_Tbl):
+                yield Table(child, parent)
+
+    @staticmethod
     async def _parse_docx(file_path: str) -> str:
-        """Parse DOCX file to plain text."""
+        """Parse DOCX file to plain text including tables."""
         doc = docx.Document(file_path)
-
         text = []
-        for paragraph in doc.paragraphs:
-            text.append(paragraph.text)
-
+        
+        for block in ContentParser._iter_block_items(doc):
+            if isinstance(block, Paragraph):
+                text.append(block.text)
+            elif isinstance(block, Table):
+                for row in block.rows:
+                    row_text = []
+                    for cell in row.cells:
+                        # Recursively extract text from cell if needed, but for now simple text access
+                        # Cells can contain paragraphs too, but cell.text gets all of it joined
+                        row_text.append(cell.text.strip())
+                    text.append(" | ".join(row_text))
+        
         return '\n'.join(text)
 
 

@@ -446,7 +446,7 @@ Provide the refined rule text and updated keywords. Be specific and actionable."
                     pass
 
             logger.error("Failed to extract valid JSON from Ollama response")
-            logger.debug(f"Response preview: {response[:500]}")
+            logger.error(f"Raw Ollama response: {response}")
             return []
 
     async def regenerate_rule(
