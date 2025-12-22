@@ -142,14 +142,30 @@ Analyze the following content against these compliance rules:
             db.flush()
 
             # Store violations
+            import uuid  # Import here or at top
+
             for violation_data in all_violations:
                 # Find rule by ID (if provided)
                 rule = None
-                if violation_data.get("rule_id"):
+                rule_id = violation_data.get("rule_id")
+                
+                if rule_id:
+                    # 1. Validate UUID format
+                    is_valid_uuid = False
                     try:
-                        rule = db.query(Rule).filter(Rule.id == violation_data.get("rule_id")).first()
-                    except:
+                        uuid.UUID(str(rule_id))
+                        is_valid_uuid = True
+                    except (ValueError, TypeError):
                         pass
+
+                    if is_valid_uuid:
+                        try:
+                            # 2. Use nested transaction (SAVEPOINT)
+                            with db.begin_nested():
+                                rule = db.query(Rule).filter(Rule.id == rule_id).first()
+                        except Exception:
+                            # Ignore DB errors here to prevent failing the whole transaction
+                            pass
 
                 violation = Violation(
                     check_id=compliance_check.id,

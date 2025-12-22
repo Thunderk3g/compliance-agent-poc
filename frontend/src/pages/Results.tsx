@@ -18,8 +18,13 @@ import { DeepAnalysisPanel } from '../components/compliance';
 import { ChunkViewer } from '../components/compliance/ChunkViewer';
 import { parseChunkLocation, isChunkBasedLocation } from '../utils/ChunkLocationParser';
 
-export const Results: React.FC = () => {
-  const { id } = useParams<{ id: string }>();
+interface ResultsProps {
+  submissionId?: string;
+}
+
+export const Results: React.FC<ResultsProps> = ({ submissionId }) => {
+  const { id: paramId } = useParams<{ id: string }>();
+  const id = submissionId || paramId;
   const [results, setResults] = useState<ComplianceCheck | null>(null);
   const [submission, setSubmission] = useState<Submission | null>(null);
   const [chunks, setChunks] = useState<Map<string, ContentChunk>>(new Map());

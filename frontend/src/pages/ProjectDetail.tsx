@@ -2,12 +2,14 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
     ArrowLeft, FileText, Upload, Shield, AlertTriangle,
-    CheckCircle2, Plus, File, Loader2, Trash2, Filter, Search
+    CheckCircle2, Plus, File, Loader2, Trash2, Filter, Search, ArrowRight, X
 } from 'lucide-react';
 import { api } from '../lib/api';
-import { Project, Guideline } from '../lib/types';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Results } from './Results';
+import { Project, Guideline, Submission } from '../lib/types';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { format } from 'date-fns';
 
 interface Rule {
     id: string;
@@ -24,10 +26,21 @@ export default function ProjectDetail() {
     const [project, setProject] = useState<Project | null>(null);
     const [guidelines, setGuidelines] = useState<Guideline[]>([]);
     const [rules, setRules] = useState<Rule[]>([]);
+    const [submissions, setSubmissions] = useState<Submission[]>([]);
+    const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
     const [activeTab, setActiveTab] = useState<'rules' | 'analysis'>('rules');
     const [isUploading, setIsUploading] = useState(false);
     const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
+    const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
+
+    // Upload state for analysis tab
+    const [analysisFile, setAnalysisFile] = useState<File | null>(null);
+    const [analysisTitle, setAnalysisTitle] = useState('');
+    const [analysisType, setAnalysisType] = useState('html');
+    const [isAnalysisUploading, setIsAnalysisUploading] = useState(false);
+    const [analysisError, setAnalysisError] = useState<string | null>(null);
+    const analysisFileInputRef = useRef<HTMLInputElement>(null);
     const [filterCategory, setFilterCategory] = useState<string>('all');
     const [filterSeverity, setFilterSeverity] = useState<string>('all');
     const [searchQuery, setSearchQuery] = useState<string>('');
@@ -46,13 +59,15 @@ export default function ProjectDetail() {
 
             const userId = localStorage.getItem('userId') || '550e8400-e29b-41d4-a716-446655440000';
 
-            const [projRes, guideRes] = await Promise.all([
+            const [projRes, guideRes, subRes] = await Promise.all([
                 api.getProject(id),
-                api.getProjectGuidelines(id)
+                api.getProjectGuidelines(id),
+                api.getSubmissions(id)
             ]);
 
             setProject(projRes.data);
             setGuidelines(guideRes.data);
+            setSubmissions(subRes.data);
 
             // Fetch all rules with proper pagination (max page_size is 100)
             const guidelineIds = guideRes.data.map((g: Guideline) => g.id);
@@ -144,6 +159,99 @@ export default function ProjectDetail() {
             case 'seo': return 'bg-cyan-100 text-cyan-800 border-cyan-200';
             default: return 'bg-gray-100 text-gray-800 border-gray-200';
         }
+    };
+
+    // Submission Actions
+    const handleAnalysisUpload = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!analysisFile || !analysisTitle || !id) return;
+
+        setIsAnalysisUploading(true);
+        setAnalysisError(null);
+
+        try {
+            const formData = new FormData();
+            formData.append('title', analysisTitle);
+            formData.append('content_type', analysisType);
+            formData.append('file', analysisFile);
+            formData.append('project_id', id);
+
+            await api.uploadSubmission(formData);
+
+            // Reset form
+            setAnalysisFile(null);
+            setAnalysisTitle('');
+            if (analysisFileInputRef.current) analysisFileInputRef.current.value = '';
+
+            // Refresh submissions
+            const subRes = await api.getSubmissions(id);
+            setSubmissions(subRes.data);
+
+            setUploadSuccess("Content uploaded successfully!");
+            setTimeout(() => setUploadSuccess(null), 3000);
+        } catch (err: any) {
+            console.error("Upload failed:", err);
+            setAnalysisError(err.response?.data?.detail || "Upload failed");
+        } finally {
+            setIsAnalysisUploading(false);
+        }
+    };
+
+    const handleAnalyze = async (submissionId: string) => {
+        setActionLoading(prev => ({ ...prev, [submissionId]: true }));
+        try {
+            await api.analyzeSubmission(submissionId);
+            const subRes = await api.getSubmissions(id);
+            setSubmissions(subRes.data);
+        } catch (error) {
+            console.error('Analysis failed:', error);
+            alert('Analysis failed. Please try again.');
+        } finally {
+            setActionLoading(prev => ({ ...prev, [submissionId]: false }));
+        }
+    };
+
+    const handlePreprocess = async (submissionId: string) => {
+        setActionLoading(prev => ({ ...prev, [submissionId]: true }));
+        try {
+            await api.triggerPreprocessing(submissionId);
+            const subRes = await api.getSubmissions(id);
+            setSubmissions(subRes.data);
+        } catch (error) {
+            console.error('Preprocessing failed:', error);
+            alert('Preprocessing failed. Please try again.');
+        } finally {
+            setActionLoading(prev => ({ ...prev, [submissionId]: false }));
+        }
+    };
+
+    const handleDeleteSubmission = async (submissionId: string) => {
+        if (!confirm('Start fresh? Deleting this submission removes all analysis history.')) return;
+
+        setActionLoading(prev => ({ ...prev, [submissionId]: true }));
+        try {
+            await api.deleteSubmission(submissionId);
+            const subRes = await api.getSubmissions(id);
+            setSubmissions(subRes.data);
+        } catch (error) {
+            console.error('Delete failed:', error);
+        } finally {
+            setActionLoading(prev => ({ ...prev, [submissionId]: false }));
+        }
+    };
+
+    const getStatusBadge = (status: string) => {
+        const colors: Record<string, string> = {
+            uploaded: 'bg-yellow-100 text-yellow-800',
+            preprocessing: 'bg-indigo-100 text-indigo-800',
+            preprocessed: 'bg-purple-100 text-purple-800',
+            analyzing: 'bg-blue-100 text-blue-800',
+            analyzed: 'bg-green-100 text-green-800',
+            failed: 'bg-red-100 text-red-800',
+            pending: 'bg-yellow-100 text-yellow-800',
+            completed: 'bg-green-100 text-green-800',
+        };
+        return <Badge className={`${colors[status] || 'bg-gray-100'} border-0`}>{status}</Badge>;
     };
 
     if (loading) {
@@ -371,25 +479,161 @@ export default function ProjectDetail() {
 
                 {activeTab === 'analysis' && (
                     <div className="space-y-6 animate-slide-up">
-                        <div className="text-center py-16 bg-gray-50 rounded-xl">
-                            <Shield className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-                            <h3 className="text-xl font-medium text-gray-900">Project Analysis</h3>
-                            <p className="text-gray-500 mt-2 mb-6">
-                                Run compliance checks specifically against this project's rules.
-                            </p>
-                            <Link
-                                to={`/upload?projectId=${id}`}
-                                className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
-                            >
-                                <Plus className="w-5 h-5" />
-                                New Analysis
-                            </Link>
-                        </div>
+                        {selectedSubmissionId ? (
+                            <div className="bg-white rounded-xl shadow-sm border p-1">
+                                <div className="p-4 border-b flex items-center justify-between bg-gray-50 rounded-t-lg">
+                                    <button
+                                        onClick={() => setSelectedSubmissionId(null)}
+                                        className="flex items-center gap-2 text-gray-600 hover:text-gray-900 font-medium"
+                                    >
+                                        <ArrowLeft className="w-4 h-4" />
+                                        Back to Submissions
+                                    </button>
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm text-gray-400">Viewing Report</span>
+                                    </div>
+                                </div>
+                                <div className="p-4">
+                                    <Results submissionId={selectedSubmissionId} />
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                {/* New Analysis Upload Form */}
+                                <Card>
+                                    <CardHeader>
+                                        <CardTitle className="text-lg">New Content Analysis</CardTitle>
+                                        <CardDescription>Upload content to check against this project's rules</CardDescription>
+                                    </CardHeader>
+                                    <CardContent>
+                                        {analysisError && (
+                                            <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-lg text-sm border border-red-100">
+                                                {analysisError}
+                                            </div>
+                                        )}
+                                        <form onSubmit={handleAnalysisUpload} className="flex gap-4 items-end">
+                                            <div className="flex-1">
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Title</label>
+                                                <input
+                                                    type="text"
+                                                    value={analysisTitle}
+                                                    onChange={e => setAnalysisTitle(e.target.value)}
+                                                    placeholder="e.g. Q1 Campaign Draft"
+                                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="w-32">
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
+                                                <select
+                                                    value={analysisType}
+                                                    onChange={e => setAnalysisType(e.target.value)}
+                                                    className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none"
+                                                >
+                                                    <option value="html">HTML</option>
+                                                    <option value="markdown">Markdown</option>
+                                                    <option value="pdf">PDF</option>
+                                                    <option value="docx">DOCX</option>
+                                                </select>
+                                            </div>
+                                            <div className="flex-1">
+                                                <label className="block text-sm font-medium text-gray-700 mb-1">File</label>
+                                                <div className="relative">
+                                                    <input
+                                                        type="file"
+                                                        ref={analysisFileInputRef}
+                                                        onChange={e => setAnalysisFile(e.target.files?.[0] || null)}
+                                                        className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100 cursor-pointer"
+                                                        accept=".html,.md,.pdf,.docx"
+                                                        required
+                                                    />
+                                                </div>
+                                            </div>
+                                            <button
+                                                type="submit"
+                                                disabled={isAnalysisUploading}
+                                                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-70 h-[42px] min-w-[100px] flex items-center justify-center"
+                                            >
+                                                {isAnalysisUploading ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Analyze'}
+                                            </button>
+                                        </form>
+                                    </CardContent>
+                                </Card>
 
-                        <div className="border rounded-lg p-6 bg-white shadow-sm opacity-50">
-                            <h3 className="text-lg font-semibold mb-3">Recent Reports</h3>
-                            <p className="text-gray-400">Analysis history specific to this project will appear here.</p>
-                        </div>
+                                {/* Recent Reports List */}
+                                <div className="space-y-4">
+                                    <h3 className="text-lg font-semibold text-gray-900">Analysis Reports</h3>
+
+                                    {submissions.length === 0 ? (
+                                        <div className="text-center py-12 bg-gray-50 rounded-xl border border-dashed text-gray-400">
+                                            <FileText className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                                            <p>No content analyzed yet</p>
+                                        </div>
+                                    ) : (
+                                        <div className="space-y-3">
+                                            {submissions.map(sub => (
+                                                <div key={sub.id} className="p-4 bg-white border rounded-xl hover:shadow-md transition-shadow flex items-center justify-between gap-4">
+                                                    <div className="flex-1 min-w-0">
+                                                        <div className="flex items-center gap-2 mb-1">
+                                                            <h4 className="font-medium text-gray-900 truncate">{sub.title}</h4>
+                                                            {getStatusBadge(sub.status)}
+                                                        </div>
+                                                        <div className="flex items-center gap-3 text-sm text-gray-500">
+                                                            <span className="uppercase text-xs font-bold tracking-wider">{sub.content_type}</span>
+                                                            <span>•</span>
+                                                            <span>{format(new Date(sub.submitted_at), 'MMM d, yyyy h:mm a')}</span>
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="flex items-center gap-2">
+                                                        {/* Preprocess Action */}
+                                                        {(sub.status === 'uploaded' || sub.status === 'pending') && (
+                                                            <button
+                                                                onClick={() => handlePreprocess(sub.id)}
+                                                                disabled={actionLoading[sub.id]}
+                                                                className="px-3 py-1.5 text-sm font-medium text-indigo-700 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition-colors"
+                                                            >
+                                                                {actionLoading[sub.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Preprocess'}
+                                                            </button>
+                                                        )}
+
+                                                        {/* Analyze Action */}
+                                                        {(sub.status === 'preprocessed' || sub.status === 'pending') && (
+                                                            <button
+                                                                onClick={() => handleAnalyze(sub.id)}
+                                                                disabled={actionLoading[sub.id]}
+                                                                className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
+                                                            >
+                                                                {actionLoading[sub.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Analyze'}
+                                                            </button>
+                                                        )}
+
+                                                        {/* View Results Action */}
+                                                        {(sub.status === 'analyzed' || sub.status === 'completed') && (
+                                                            <button
+                                                                onClick={() => setSelectedSubmissionId(sub.id)}
+                                                                className="px-3 py-1.5 text-sm font-medium text-green-700 bg-green-50 hover:bg-green-100 rounded-lg transition-colors flex items-center gap-1"
+                                                            >
+                                                                View Report <ArrowRight className="w-3 h-3" />
+                                                            </button>
+                                                        )}
+
+                                                        <button
+                                                            onClick={() => handleDeleteSubmission(sub.id)}
+                                                            disabled={actionLoading[sub.id]}
+                                                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                            title="Delete Analysis"
+                                                        >
+                                                            {actionLoading[sub.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </>
+                        )}
                     </div>
                 )}
             </div>

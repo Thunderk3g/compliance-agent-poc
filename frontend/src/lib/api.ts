@@ -29,7 +29,7 @@ export const api = {
       headers: { 'Content-Type': 'multipart/form-data' }
     }),
 
-  getSubmissions: () => apiClient.get('/api/submissions'),
+  getSubmissions: (projectId?: string) => apiClient.get('/api/submissions', { params: { project_id: projectId } }),
 
   getSubmission: (id: string) =>
     apiClient.get(`/api/submissions/${id}`),

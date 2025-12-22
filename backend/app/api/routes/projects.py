@@ -85,18 +85,7 @@ async def upload_guideline(
         "errors": result["errors"]
     }
 
-class ProjectCreate(BaseModel):
-    name: str
-    description: str = None
-
-class ProjectResponse(BaseModel):
-    id: UUID
-    name: str
-    description: str = None
-    created_by: UUID
-
-    class Config:
-        from_attributes = True
+from ...schemas.project import ProjectCreate, ProjectResponse, GuidelineResponse
 
 @router.post("/", response_model=ProjectResponse)
 def create_project(
@@ -130,14 +119,6 @@ def get_project(
     if project.created_by != user_id:
          raise HTTPException(status_code=403, detail="Not authorized to view this project")
     return project
-
-class GuidelineResponse(BaseModel):
-    id: UUID
-    title: str
-    created_at: datetime
-
-    class Config:
-        from_attributes = True
 
 @router.get("/{project_id}/guidelines", response_model=List[GuidelineResponse])
 def get_project_guidelines(

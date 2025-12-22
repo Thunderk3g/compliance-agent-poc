@@ -77,6 +77,7 @@ async def upload_submission(
 def list_submissions(
     skip: int = 0,
     limit: int = 50,
+    project_id: uuid.UUID = None,
     db: Session = Depends(get_db)
 ):
     """List all submissions."""
@@ -84,14 +85,20 @@ def list_submissions(
     from ...models.deep_analysis import DeepAnalysis
 
     # Join with ComplianceCheck and DeepAnalysis to detect if deep analysis exists
-    results = db.query(
+    query = db.query(
         Submission,
         func.count(DeepAnalysis.id) > 0
     ).outerjoin(
         ComplianceCheck, Submission.id == ComplianceCheck.submission_id
     ).outerjoin(
         DeepAnalysis, ComplianceCheck.id == DeepAnalysis.check_id
-    ).group_by(
+    )
+
+    # Filter by project_id if provided
+    if project_id:
+        query = query.filter(Submission.project_id == project_id)
+
+    results = query.group_by(
         Submission.id
     ).order_by(
         Submission.submitted_at.desc()
