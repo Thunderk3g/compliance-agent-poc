@@ -222,3 +222,36 @@ async def improve_guideline_rules(
         "rules_added": result["rules_created"],
         "errors": result["errors"]
     }
+
+@router.delete("/{project_id}/rules/{rule_id}")
+def delete_project_rule(
+    project_id: UUID,
+    rule_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    service = ProjectService(db)
+    project = service.get_project(project_id)
+    if not project or project.created_by != user_id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    rule = db.query(Rule).filter(
+        Rule.id == rule_id,
+        Rule.project_id == project_id
+    ).first()
+
+    if not rule:
+        # Also check if it's linked via source guideline in this project
+        rule = db.query(Rule).join(Guideline).filter(
+            Rule.id == rule_id,
+            Guideline.project_id == project_id
+        ).first()
+
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found in this project")
+
+    # Soft delete
+    rule.is_active = False
+    db.commit()
+
+    return {"success": True, "message": "Rule deleted"}

@@ -93,6 +93,7 @@ export interface Rule {
   is_active: boolean;
   created_by: string | null;
   created_at: string;
+  project_id?: string;
 }
 
 export interface RuleListResponse {

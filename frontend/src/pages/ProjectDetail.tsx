@@ -211,6 +211,22 @@ export default function ProjectDetail() {
         }
     };
 
+    const handleDeleteRule = async (ruleId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (!confirm('Are you sure you want to delete this rule?')) return;
+        if (!id) return;
+
+        try {
+            await api.deleteProjectRule(id, ruleId);
+            setUploadSuccess("Rule deleted successfully");
+            setTimeout(() => setUploadSuccess(null), 3000);
+            fetchProjectData();
+        } catch (err) {
+            console.error("Failed to delete rule:", err);
+            alert("Failed to delete rule");
+        }
+    };
+
     // Submission Actions
     const handleAnalysisUpload = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -511,7 +527,7 @@ export default function ProjectDetail() {
                                     {/* Rules List */}
                                     <div className="space-y-3">
                                         {filteredRules.map(rule => (
-                                            <div key={rule.id} className="p-4 bg-white border rounded-lg hover:shadow-md transition-shadow">
+                                            <div key={rule.id} className="p-4 bg-white border rounded-lg hover:shadow-md transition-shadow group">
                                                 <div className="flex items-start justify-between gap-4">
                                                     <div className="flex-1">
                                                         <p className="text-gray-900 font-medium">{rule.rule_text}</p>
@@ -522,6 +538,7 @@ export default function ProjectDetail() {
                                                             <Badge className={`${getSeverityColor(rule.severity)} text-xs`}>
                                                                 {rule.severity}
                                                             </Badge>
+
                                                             {rule.is_active ? (
                                                                 <Badge className="bg-green-100 text-green-800 border-green-200 text-xs">
                                                                     Active
@@ -533,6 +550,13 @@ export default function ProjectDetail() {
                                                             )}
                                                         </div>
                                                     </div>
+                                                    <button
+                                                        onClick={(e) => handleDeleteRule(rule.id, e)}
+                                                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
+                                                        title="Delete Rule"
+                                                    >
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
                                                 </div>
                                             </div>
                                         ))}
@@ -704,73 +728,75 @@ export default function ProjectDetail() {
                 )}
             </div>
             {/* Improve Rules Modal */}
-            {improveModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
-                    <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden animate-scale-in">
-                        <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-purple-50/50">
-                            <div>
-                                <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
-                                    <Sparkles className="w-5 h-5 text-purple-600" />
-                                    Improve Rules
-                                </h3>
-                                <p className="text-sm text-gray-500 mt-1">Use AI to extract more specific rules.</p>
-                            </div>
-                            <button
-                                onClick={() => setImproveModalOpen(false)}
-                                className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-lg transition-colors"
-                            >
-                                <X className="w-5 h-5" />
-                            </button>
-                        </div>
-
-                        <form onSubmit={handleImproveRules} className="p-6 space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Instructions for AI
-                                </label>
-                                <textarea
-                                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none min-h-[100px] resize-none"
-                                    placeholder="e.g. 'Focus on extracting rules related to payment timelines' or 'Find specific prohibitions regarding logos'"
-                                    value={improveInstructions}
-                                    onChange={(e) => setImproveInstructions(e.target.value)}
-                                    autoFocus
-                                />
-                                <p className="text-xs text-gray-500 mt-2 flex items-start gap-1">
-                                    <MessageSquare className="w-3 h-3 mt-0.5" />
-                                    <span>The AI will re-scan the document with these specific instructions to find additional rules.</span>
-                                </p>
-                            </div>
-
-                            <div className="flex items-center justify-end gap-3 pt-2">
+            {
+                improveModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden animate-scale-in">
+                            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-purple-50/50">
+                                <div>
+                                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                        <Sparkles className="w-5 h-5 text-purple-600" />
+                                        Improve Rules
+                                    </h3>
+                                    <p className="text-sm text-gray-500 mt-1">Use AI to extract more specific rules.</p>
+                                </div>
                                 <button
-                                    type="button"
                                     onClick={() => setImproveModalOpen(false)}
-                                    className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                                    className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-lg transition-colors"
                                 >
-                                    Cancel
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={isImproving || !improveInstructions.trim()}
-                                    className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors shadow-sm"
-                                >
-                                    {isImproving ? (
-                                        <>
-                                            <Loader2 className="w-4 h-4 animate-spin" />
-                                            Processing...
-                                        </>
-                                    ) : (
-                                        <>
-                                            <Sparkles className="w-4 h-4" />
-                                            Generate Rules
-                                        </>
-                                    )}
+                                    <X className="w-5 h-5" />
                                 </button>
                             </div>
-                        </form>
+
+                            <form onSubmit={handleImproveRules} className="p-6 space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Instructions for AI
+                                    </label>
+                                    <textarea
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none min-h-[100px] resize-none"
+                                        placeholder="e.g. 'Focus on extracting rules related to payment timelines' or 'Find specific prohibitions regarding logos'"
+                                        value={improveInstructions}
+                                        onChange={(e) => setImproveInstructions(e.target.value)}
+                                        autoFocus
+                                    />
+                                    <p className="text-xs text-gray-500 mt-2 flex items-start gap-1">
+                                        <MessageSquare className="w-3 h-3 mt-0.5" />
+                                        <span>The AI will re-scan the document with these specific instructions to find additional rules.</span>
+                                    </p>
+                                </div>
+
+                                <div className="flex items-center justify-end gap-3 pt-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setImproveModalOpen(false)}
+                                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isImproving || !improveInstructions.trim()}
+                                        className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors shadow-sm"
+                                    >
+                                        {isImproving ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                Processing...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Sparkles className="w-4 h-4" />
+                                                Generate Rules
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+        </div >
     );
 }

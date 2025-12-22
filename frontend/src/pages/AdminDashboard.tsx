@@ -23,6 +23,7 @@ export default function AdminDashboard() {
 
   // Data state
   const [rules, setRules] = useState<Rule[]>([]);
+  const [projectsMap, setProjectsMap] = useState<Record<string, string>>({});
   const [stats, setStats] = useState<RuleStats | null>(null);
   const [loading, setLoading] = useState(false);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -93,6 +94,20 @@ export default function AdminDashboard() {
     }
   };
 
+  // Fetch projects for mapping
+  const fetchProjects = async () => {
+    try {
+      const response = await api.getProjects();
+      const map: Record<string, string> = {};
+      response.data.forEach((p: any) => {
+        map[p.id] = p.name;
+      });
+      setProjectsMap(map);
+    } catch (err) {
+      console.error("Failed to fetch projects:", err);
+    }
+  };
+
   // Reset page when switching tabs
   useEffect(() => {
     setCurrentPage(1);
@@ -105,6 +120,7 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     fetchStats();
+    fetchProjects();
   }, []);
 
   // Handle file upload - NEW PREVIEW WORKFLOW
@@ -433,14 +449,47 @@ export default function AdminDashboard() {
           )}
         </div>
 
-        <RulesTable
-          rules={rules}
-          loading={loading}
-          onEdit={setEditingRule}
-          onDelete={activeTab === 'active' ? handleDeleteRule : undefined}
-          onRestore={activeTab === 'deactivated' ? handleRestoreRule : undefined}
-          showRestoreButton={activeTab === 'deactivated'}
-        />
+
+
+        {/* Grouped Rules View (Optional Override) */}
+        {/* If we want to show grouping, we might need to modify RulesTable or render multiple tables here.
+            For now, sticking to the single table but passing the project map could be useful if RulesTable supported it.
+            However, the requirement is "categorized by projects".
+            Let's perform the grouping HERE and map over it.
+         */}
+        <div className="space-y-8">
+          {Object.entries(
+            rules.reduce((acc, rule) => {
+              const key = rule.project_id || 'global';
+              if (!acc[key]) acc[key] = [];
+              acc[key].push(rule);
+              return acc;
+            }, {} as Record<string, Rule[]>)
+          ).sort(([keyA], [keyB]) => {
+            if (keyA === 'global') return -1;
+            if (keyB === 'global') return 1;
+            return (projectsMap[keyA] || '').localeCompare(projectsMap[keyB] || '');
+          }).map(([projectId, projectRules]) => (
+            <div key={projectId} className="border rounded-lg overflow-hidden">
+              <div className="bg-gray-50 px-4 py-2 border-b font-medium text-gray-700 flex justify-between">
+                <span>
+                  {projectId === 'global' ? 'Global / General Rules' : (projectsMap[projectId] || 'Unknown Project')}
+                </span>
+                <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">
+                  {projectRules.length} rules
+                </span>
+              </div>
+              <RulesTable
+                rules={projectRules}
+                loading={loading}
+                onEdit={setEditingRule}
+                onDelete={activeTab === 'active' ? handleDeleteRule : undefined}
+                onRestore={activeTab === 'deactivated' ? handleRestoreRule : undefined}
+                showRestoreButton={activeTab === 'deactivated'}
+              />
+            </div>
+          ))}
+        </div>
 
         {/* Pagination */}
         <Pagination
