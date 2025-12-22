@@ -51,6 +51,12 @@ export default function ProjectDetail() {
     const [improveInstructions, setImproveInstructions] = useState('');
     const [isImproving, setIsImproving] = useState(false);
 
+    // Refine Rule Modal State
+    const [refineModalOpen, setRefineModalOpen] = useState(false);
+    const [selectedRuleId, setSelectedRuleId] = useState<string | null>(null);
+    const [refineInstructions, setRefineInstructions] = useState('');
+    const [isRefining, setIsRefining] = useState(false);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -86,7 +92,8 @@ export default function ProjectDetail() {
                 const rulesRes = await api.getRules({
                     userId,
                     page: currentPage,
-                    page_size: 100
+                    page_size: 100,
+                    is_active: true
                 });
 
                 // Filter rules for this project
@@ -224,6 +231,32 @@ export default function ProjectDetail() {
         } catch (err) {
             console.error("Failed to delete rule:", err);
             alert("Failed to delete rule");
+        }
+    };
+
+    const openRefineModal = (ruleId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        setSelectedRuleId(ruleId);
+        setRefineInstructions('');
+        setRefineModalOpen(true);
+    };
+
+    const handleRefineRule = async (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!id || !selectedRuleId) return;
+
+        setIsRefining(true);
+        try {
+            await api.refineProjectRule(id, selectedRuleId, refineInstructions);
+            setRefineModalOpen(false);
+            setUploadSuccess("Rule refined successfully!");
+            setTimeout(() => setUploadSuccess(null), 3000);
+            fetchProjectData();
+        } catch (err) {
+            console.error("Failed to refine rule:", err);
+            alert("Failed to refine rule");
+        } finally {
+            setIsRefining(false);
         }
     };
 
@@ -550,13 +583,22 @@ export default function ProjectDetail() {
                                                             )}
                                                         </div>
                                                     </div>
-                                                    <button
-                                                        onClick={(e) => handleDeleteRule(rule.id, e)}
-                                                        className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors opacity-0 group-hover:opacity-100"
-                                                        title="Delete Rule"
-                                                    >
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
+                                                    <div className="flex items-center gap-1">
+                                                        <button
+                                                            onClick={(e) => openRefineModal(rule.id, e)}
+                                                            className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
+                                                            title="Modify with AI"
+                                                        >
+                                                            <Sparkles className="w-4 h-4" />
+                                                        </button>
+                                                        <button
+                                                            onClick={(e) => handleDeleteRule(rule.id, e)}
+                                                            className="p-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                                                            title="Delete Rule"
+                                                        >
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
                                                 </div>
                                             </div>
                                         ))}
@@ -788,6 +830,77 @@ export default function ProjectDetail() {
                                             <>
                                                 <Sparkles className="w-4 h-4" />
                                                 Generate Rules
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                )
+            }
+
+            {/* Refine Rule Modal */}
+            {
+                refineModalOpen && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-fade-in">
+                        <div className="bg-white rounded-xl shadow-xl max-w-md w-full overflow-hidden animate-scale-in">
+                            <div className="p-6 border-b border-gray-100 flex items-center justify-between bg-purple-50/50">
+                                <div>
+                                    <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                                        <Sparkles className="w-5 h-5 text-purple-600" />
+                                        Modify Rule with AI
+                                    </h3>
+                                    <p className="text-sm text-gray-500 mt-1">Refine this specific rule using AI.</p>
+                                </div>
+                                <button
+                                    onClick={() => setRefineModalOpen(false)}
+                                    className="text-gray-400 hover:text-gray-600 p-1 hover:bg-gray-100 rounded-lg transition-colors"
+                                >
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <form onSubmit={handleRefineRule} className="p-6 space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                                        Instructions for AI
+                                    </label>
+                                    <textarea
+                                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-purple-500 focus:border-purple-500 outline-none min-h-[100px] resize-none"
+                                        placeholder="e.g. 'Change the severity to High' or 'Make the rule more lenient regarding typos'"
+                                        value={refineInstructions}
+                                        onChange={(e) => setRefineInstructions(e.target.value)}
+                                        autoFocus
+                                    />
+                                    <p className="text-xs text-gray-500 mt-2 flex items-start gap-1">
+                                        <MessageSquare className="w-3 h-3 mt-0.5" />
+                                        <span>The AI will rewrite this specific rule based on your instructions.</span>
+                                    </p>
+                                </div>
+
+                                <div className="flex items-center justify-end gap-3 pt-2">
+                                    <button
+                                        type="button"
+                                        onClick={() => setRefineModalOpen(false)}
+                                        className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={isRefining || !refineInstructions.trim()}
+                                        className="px-4 py-2 text-sm font-medium text-white bg-purple-600 rounded-lg hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2 transition-colors shadow-sm"
+                                    >
+                                        {isRefining ? (
+                                            <>
+                                                <Loader2 className="w-4 h-4 animate-spin" />
+                                                Refining...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <Sparkles className="w-4 h-4" />
+                                                Refine Rule
                                             </>
                                         )}
                                     </button>

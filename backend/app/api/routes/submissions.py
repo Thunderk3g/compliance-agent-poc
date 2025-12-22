@@ -187,10 +187,19 @@ def delete_submission(
 
     # Delete physical file if exists
     if submission.file_path and os.path.exists(submission.file_path):
-        os.remove(submission.file_path)
+        try:
+            os.remove(submission.file_path)
+        except Exception as e:
+            # Log error but continue with DB deletion
+            # In a real app, might want to schedule a cleanup job for orphaned files
+            pass
 
-    db.delete(submission)
-    db.commit()
+    try:
+        db.delete(submission)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Database error during deletion: {str(e)}")
 
     return {"message": "Submission deleted successfully"}
 

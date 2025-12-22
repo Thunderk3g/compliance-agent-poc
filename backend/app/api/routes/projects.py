@@ -255,3 +255,61 @@ def delete_project_rule(
     db.commit()
 
     return {"success": True, "message": "Rule deleted"}
+
+
+@router.post("/{project_id}/rules/{rule_id}/refine")
+async def refine_project_rule(
+    project_id: UUID,
+    rule_id: UUID,
+    request: ImproveRulesRequest,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """Refine a specific rule using AI instructions."""
+    service = ProjectService(db)
+    project = service.get_project(project_id)
+    if not project or project.created_by != user_id:
+        raise HTTPException(status_code=404, detail="Project not found")
+
+    rule = db.query(Rule).filter(
+        Rule.id == rule_id,
+        Rule.project_id == project_id
+    ).first()
+
+    if not rule:
+        # Check source guideline
+        rule = db.query(Rule).join(Guideline).filter(
+            Rule.id == rule_id,
+            Guideline.project_id == project_id
+        ).first()
+
+    if not rule:
+        raise HTTPException(status_code=404, detail="Rule not found in this project")
+
+    # Call AI service
+    result = await rule_generator_service.refine_rule_with_ai(
+        rule_text=rule.rule_text,
+        refinement_instruction=request.instructions,
+        category=rule.category,
+        severity=rule.severity
+    )
+
+    if result["success"]:
+        # Update rule in place
+        rule.rule_text = result["refined_text"]
+        if result["refined_keywords"]:
+            rule.keywords = result["refined_keywords"]
+        db.commit()
+        
+        return {
+            "success": True,
+            "rule": {
+                "id": str(rule.id),
+                "rule_text": rule.rule_text,
+                "category": rule.category,
+                "severity": rule.severity,
+                "keywords": rule.keywords
+            }
+        }
+    else:
+        raise HTTPException(status_code=500, detail=f"Failed to refine rule: {result.get('error')}")

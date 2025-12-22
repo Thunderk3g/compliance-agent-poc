@@ -254,6 +254,9 @@ export const api = {
   improveRules: (projectId: string, guidelineId: string, instructions: string) =>
     apiClient.post(`/api/projects/${projectId}/guidelines/${guidelineId}/improve-rules`, { instructions }),
 
+  refineProjectRule: (projectId: string, ruleId: string, instructions: string) =>
+    apiClient.post(`/api/projects/${projectId}/rules/${ruleId}/refine`, { instructions }),
+
   deleteProjectRule: (projectId: string, ruleId: string) =>
     apiClient.delete(`/api/projects/${projectId}/rules/${ruleId}`),
 
