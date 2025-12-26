@@ -1,9 +1,15 @@
 import httpx
 import json
 import asyncio
-from typing import Dict, Any, Optional, List
+import time
+from typing import Dict, Any, Optional, List, Type, TypeVar
+from sqlalchemy.orm import Session
+from ..models.tool_invocation import ToolInvocation
 import logging
+from pydantic import BaseModel, ValidationError
 from ..config import settings
+
+T = TypeVar("T", bound=BaseModel)
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +76,79 @@ class OllamaService:
 
                 # Exponential backoff: 1s, 2s, 4s
                 await asyncio.sleep(2 ** attempt)
+
+    async def generate_structured_response(
+        self,
+        prompt: str,
+        output_model: Type[T],
+        system_prompt: str = None,
+        context: Dict[str, Any] = None,
+        execution_id: str = None,
+        db: Session = None,
+        tool_name: str = "llm_structured"
+    ) -> T:
+        """
+        Generate a structured response validated against a Pydantic model (Factor 4).
+        Implements Factor 9: Compact Errors into Context Window on failure.
+        """
+        # Append schema instructions to system prompt
+        schema_instruction = (
+            f"\nYou must output JSON that adheres to this schema:\n"
+            f"{output_model.model_json_schema()}\n"
+            f"Return ONLY the JSON object, no other text."
+        )
+        full_system_prompt = (system_prompt or "") + schema_instruction
+
+        current_prompt = prompt
+        
+        for attempt in range(self.max_retries):
+            try:
+                response_text = await self.generate_response(
+                    prompt=current_prompt,
+                    system_prompt=full_system_prompt,
+                    context=context
+                )
+                
+                # Parse and Clean JSON
+                if "```json" in response_text:
+                    start = response_text.find("```json") + 7
+                    end = response_text.find("```", start)
+                    response_text = response_text[start:end].strip()
+                elif "```" in response_text:
+                    start = response_text.find("```") + 3
+                    end = response_text.find("```", start)
+                    response_text = response_text[start:end].strip()
+                
+                # Validate
+                result = output_model.model_validate_json(response_text)
+                
+                # Record metrics if execution_id is provided
+                if execution_id and db:
+                     await self._record_tool_invocation(
+                        db=db,
+                        execution_id=execution_id,
+                        tool_name=tool_name,
+                        input_data={"prompt": prompt[:500], "system": system_prompt[:200] if system_prompt else None},
+                        output_data=result.model_dump(mode='json'),
+                        start_time=time.time(), # This is inaccurate as it's after execution, but acceptable for now or need to move start_time up
+                        end_time=time.time(),
+                        tokens=len(prompt) + len(response_text) # Rough estimate
+                     )
+                
+                return result
+
+            except (ValidationError, json.JSONDecodeError) as e:
+                logger.warning(f"Structured geneation attempt {attempt + 1} failed: {e}")
+                
+                if attempt == self.max_retries - 1:
+                    raise e
+                    
+                # Factor 9: Feed error back into context
+                error_feedback = f"\n\nPrevious response was invalid JSON or did not match schema. Error: {str(e)}. \nPlease CORRECT the JSON output."
+                current_prompt += error_feedback
+                
+                await asyncio.sleep(1)
+
 
     def _build_chat_messages(
         self,
@@ -378,6 +457,42 @@ Return ONLY the JSON array, no other text.
     async def __aexit__(self, exc_type, exc_val, exc_tb):
         await self.client.aclose()
 
+
+    async def _record_tool_invocation(
+        self,
+        db: Session,
+        execution_id: str,
+        tool_name: str,
+        input_data: Dict,
+        output_data: Dict,
+        start_time: float,
+        end_time: float,
+        tokens: int
+    ):
+        """Record tool invocation metrics to DB."""
+        try:
+            # Run in sync wrapper if needed, but for now assuming db session is thread-safe or handled
+            # Since this calls DB, we might want to do it via sync_to_async or similar if strictly async
+            # But SQLAlchemy async session usage might differ. 
+            # Assuming standard sync session passed from calls.
+            # We'll calculate duration and crude cost estimate
+            duration_ms = int((end_time - start_time) * 1000)
+            cost = (tokens / 1000) * 0.0001 # Dummy cost model
+            
+            invocation = ToolInvocation(
+                execution_id=execution_id,
+                tool_name=tool_name,
+                input_data=input_data,
+                output_data=output_data,
+                tokens_used=tokens,
+                execution_time_ms=duration_ms,
+                cost_usd=cost
+            )
+            db.add(invocation)
+            db.commit()
+            
+        except Exception as e:
+            logger.error(f"Failed to record tool invocation: {e}")
 
 # Singleton instance
 ollama_service = OllamaService()

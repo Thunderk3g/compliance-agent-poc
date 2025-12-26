@@ -6,7 +6,6 @@ It parses documents, sends them to Ollama for rule extraction, validates the out
 and stores the rules in the database.
 """
 
-import json
 import logging
 import uuid
 from typing import List, Dict, Any, Optional
@@ -17,13 +16,12 @@ from .ollama_service import ollama_service
 from .content_parser import content_parser
 from .prompts.rule_extraction_prompt import (
     build_rule_extraction_prompt,
-    build_rule_extraction_prompt_with_instructions,
-    validate_extracted_rule,
-    VALID_CATEGORIES,
-    VALID_SEVERITIES
+    build_rule_extraction_prompt_with_instructions
 )
 from ..models.rule import Rule
 from ..models.user import User
+from ..schemas.rule_extraction_schema import RuleExtractionResult
+from ..schemas.human_review_schema import HumanReviewRequest
 
 logger = logging.getLogger(__name__)
 
@@ -112,43 +110,46 @@ class RuleGeneratorService:
             # Step 4: Call Ollama for rule extraction
             logger.info("Sending document to Ollama for rule extraction...")
             try:
-                ollama_response = await self.ollama.generate_response(
+                extraction_result = await self.ollama.generate_structured_response(
                     prompt=prompt_data["user_prompt"],
+                    output_model=RuleExtractionResult,
                     system_prompt=prompt_data["system_prompt"]
                 )
             except Exception as e:
                 result["errors"].append(f"Ollama service error: {str(e)}")
                 return result
 
-            # Step 5: Parse and validate JSON response
-            logger.info("Parsing Ollama response...")
-            extracted_rules = self._parse_ollama_response(ollama_response)
-
-            if not extracted_rules:
-                result["errors"].append("No rules extracted from document. Response may be invalid JSON.")
-                return result
-
+            # Step 5: Process extracted rules
+            extracted_rules = extraction_result.rules
             logger.info(f"Extracted {len(extracted_rules)} rules from LLM response")
 
             # Step 6: Validate and insert rules into database
             for rule_data in extracted_rules:
                 try:
-                    # Validate rule
-                    is_valid, error_msg = validate_extracted_rule(rule_data)
-                    if not is_valid:
-                        logger.warning(f"Invalid rule: {error_msg}")
+                    # Factor 7: Contact Humans (Ambiguity Detection)
+                    # If rule is Critical/High but confidence is low (< 0.8), trigger review
+                    if rule_data.severity in ["critical", "high"] and rule_data.confidence_score < 0.8:
+                        review_req = HumanReviewRequest(
+                            rule_text=rule_data.rule_text,
+                            reason=f"Low Ref Confidence ({rule_data.confidence_score}) for {rule_data.severity} rule.",
+                            suggested_action="Verify exact wording against regulation.",
+                            severity=rule_data.severity
+                        )
+                        result["errors"].append(f"[HUMAN_REVIEW_REQUIRED] {review_req.dict()}")
                         result["rules_failed"] += 1
-                        result["errors"].append(f"Invalid rule: {error_msg}")
                         continue
+
+                    # Validate rule (Schema validation already happened via Pydantic)
+                    # We can add extra logic if needed, but Pydantic handles types
+                    pass
 
                     # Create rule in database
                     new_rule = Rule(
-                        category=rule_data["category"],
-                        rule_text=rule_data["rule_text"],
-                        severity=rule_data["severity"],
-                        keywords=rule_data["keywords"],
-                        pattern=rule_data.get("pattern"),
-                        points_deduction=float(rule_data["points_deduction"]),
+                        category=rule_data.category,
+                        rule_text=rule_data.rule_text,
+                        severity=rule_data.severity,
+                        keywords=rule_data.keywords,
+                        points_deduction=rule_data.points_deduction,
                         is_active=True,
                         created_by=created_by_user_id,
                         project_id=project_id,
@@ -271,45 +272,31 @@ class RuleGeneratorService:
             # Step 4: Call Ollama for rule extraction
             logger.info("Sending document to Ollama for rule extraction (preview)...")
             try:
-                ollama_response = await self.ollama.generate_response(
+                extraction_result = await self.ollama.generate_structured_response(
                     prompt=prompt_data["user_prompt"],
+                    output_model=RuleExtractionResult,
                     system_prompt=prompt_data["system_prompt"]
                 )
             except Exception as e:
                 result["errors"].append(f"Ollama service error: {str(e)}")
                 return result
 
-            # Step 5: Parse and validate JSON response
-            logger.info("Parsing Ollama response for preview...")
-            extracted_rules = self._parse_ollama_response(ollama_response)
-
-            if not extracted_rules:
-                result["errors"].append("No rules extracted from document. Response may be invalid JSON.")
-                return result
-
+            extracted_rules = extraction_result.rules
             result["total_extracted"] = len(extracted_rules)
             logger.info(f"Extracted {len(extracted_rules)} rules for preview")
 
             # Step 6: Validate rules and create draft objects (NO DB SAVE)
             for idx, rule_data in enumerate(extracted_rules):
                 try:
-                    # Validate rule structure
-                    is_valid, error_msg = validate_extracted_rule(rule_data)
-                    if not is_valid:
-                        logger.warning(f"Invalid rule in preview: {error_msg}")
-                        result["errors"].append(f"Rule {idx + 1}: {error_msg}")
-                        continue
-
-                    # Create draft rule (with temp_id instead of real DB id)
+                    # Create draft rule (with temp_id)
                     draft_rule = {
                         "temp_id": f"draft_{uuid.uuid4().hex[:8]}",
-                        "category": rule_data["category"],
-                        "rule_text": rule_data["rule_text"],
-                        "severity": rule_data["severity"],
-                        "keywords": rule_data["keywords"],
-                        "pattern": rule_data.get("pattern"),
-                        "points_deduction": float(rule_data["points_deduction"]),
-                        "is_approved": True  # Default to approved, user can reject
+                        "category": rule_data.category,
+                        "rule_text": rule_data.rule_text,
+                        "severity": rule_data.severity,
+                        "keywords": rule_data.keywords,
+                        "points_deduction": float(rule_data.points_deduction),
+                        "is_approved": True  # Default to approved
                     }
 
                     result["draft_rules"].append(draft_rule)
@@ -410,47 +397,7 @@ Provide the refined rule text and updated keywords. Be specific and actionable."
             }
 
 
-    def _parse_ollama_response(self, response: str) -> List[Dict[str, Any]]:
-        """
-        Parse Ollama response and extract JSON array of rules.
 
-        Args:
-            response: Raw response string from Ollama
-
-        Returns:
-            List of rule dictionaries
-        """
-        try:
-            # Try direct JSON parsing first
-            rules = json.loads(response)
-            if isinstance(rules, list):
-                return rules
-            elif isinstance(rules, dict) and "rules" in rules:
-                return rules["rules"]
-            else:
-                logger.warning("Response is not a list or dict with 'rules' key")
-                return []
-
-        except json.JSONDecodeError:
-            # Try to extract JSON from text with markdown or other formatting
-            logger.info("Direct JSON parsing failed, attempting to extract JSON...")
-
-            # Look for JSON array pattern
-            import re
-            json_pattern = r'\[\s*\{.*?\}\s*\]'
-            match = re.search(json_pattern, response, re.DOTALL)
-
-            if match:
-                try:
-                    rules = json.loads(match.group(0))
-                    if isinstance(rules, list):
-                        return rules
-                except json.JSONDecodeError:
-                    pass
-
-            logger.error("Failed to extract valid JSON from Ollama response")
-            logger.error(f"Raw Ollama response: {response}")
-            return []
 
     async def regenerate_rule(
         self,

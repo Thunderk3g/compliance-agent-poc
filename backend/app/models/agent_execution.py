@@ -18,6 +18,7 @@ class AgentExecution(Base):
     session_id = Column(UUID(as_uuid=True), nullable=False, index=True)
     user_id = Column(UUID(as_uuid=True), ForeignKey('users.id', ondelete='SET NULL'),
                      nullable=True)
+    project_id = Column(UUID(as_uuid=True), nullable=True, index=True)
     status = Column(String(20), default='running')
     input_data = Column(JSONB, nullable=True)
     output_data = Column(JSONB, nullable=True)

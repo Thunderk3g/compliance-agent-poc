@@ -12,27 +12,55 @@ import logging
 
 from ..models.submission import Submission
 from ..models.content_chunk import ContentChunk
+from ..models.rule import Rule
 from .content_parser import ContentParserService
 
 logger = logging.getLogger(__name__)
 
 
-class PreprocessingService:
+class ContextEngineeringService:
     """
-    Document chunking and preprocessing service with token-based chunking.
+    Context Engineering Service (formerly PreprocessingService).
     
     Responsibilities:
-    - Parse documents based on content type
-    - Split content into token-aware chunks
-    - Extract metadata (page numbers, token counts, offsets)
-    - Store chunks in database with proper ordering
-    
-    Token-Based Chunking:
-    - Uses tiktoken (primary), transformers (secondary), or whitespace (fallback)
-    - Implements sentence-aware chunking with spaCy or regex fallback
-    - Supports configurable chunk size and overlap in tokens
-    - Generates comprehensive metadata for each chunk
+    - Token-based content chunking (Context Window Management)
+    - Prompt assembly and context optimization (Factor 3)
     """
+
+    COMPLIANCE_PROMPT_TEMPLATE = """You are a compliance expert for insurance marketing content.
+
+Analyze the following content against the provided compliance rules.
+
+**Rules:**
+{rules_section}
+
+**Content to Analyze:**
+{content}
+
+**Instructions:**
+1. Identify all compliance violations based on the rules.
+2. Provide a brief overall assessment.
+3. List key issues identified.
+4. Output MUST be valid JSON matching the schema below.
+
+**Output Format Example:**
+{{
+  "violations": [
+    {{
+      "category": "irdai/brand/seo",
+      "severity": "high",
+      "rule_id": "rule_1",
+      "description": "Violation description",
+      "location": "Paragraph 2",
+      "current_text": "text causing violation",
+      "suggested_fix": "fixed text",
+      "auto_fixable": true
+    }}
+  ],
+  "overall_assessment": "Summary of compliance status...",
+  "key_issues": ["Issue 1", "Issue 2"]
+}}
+"""
     
     def __init__(self, db: Session):
         self.db = db
@@ -47,6 +75,32 @@ class PreprocessingService:
         self.nlp = None
         self.sentence_splitter_type = None
         self._init_sentence_splitter()
+
+    def create_compliance_prompts(self, content: str, rules: Dict[str, List[Rule]]) -> str:
+        """
+        Build the compliance checking prompt (Context Construction).
+        Factor 3: Own Your Context Window.
+        """
+        rules_sections = []
+        for category, category_rules in rules.items():
+            if category_rules:
+                section_text = f"**{category.upper()} Rules:**\n"
+                for rule in category_rules:
+                    # Sanitize rule text to save tokens/avoid confusion
+                    rule_text = rule.rule_text.replace("\n", " ").strip()
+                    section_text += f"- [ID: {rule.id}] {rule_text} (Severity: {rule.severity})\n"
+                rules_sections.append(section_text)
+
+        rules_section = "\n".join(rules_sections)
+        
+        # Truncate content if too long (Basic safety, but chunking should handle this)
+        # Ideally we check token count here too
+        truncated_content = content[:3000] if len(content) > 3000 else content
+
+        return self.COMPLIANCE_PROMPT_TEMPLATE.format(
+            rules_section=rules_section,
+            content=truncated_content
+        )
     
     def _init_tokenizer(self):
         """Initialize tokenizer with fallback: tiktoken -> transformers -> whitespace."""
@@ -79,7 +133,13 @@ class PreprocessingService:
         """Initialize sentence splitter: spaCy -> regex fallback."""
         try:
             import spacy
-            self.nlp = spacy.load("en_core_web_sm")
+            try:
+                self.nlp = spacy.load("en_core_web_sm")
+            except OSError:
+                # Fallback: Try importing as module (common in some envs)
+                import en_core_web_sm
+                self.nlp = en_core_web_sm.load()
+                
             self.sentence_splitter_type = "spacy"
             logger.info("Using spaCy sentence splitter (en_core_web_sm)")
         except Exception as e:
@@ -562,3 +622,6 @@ class PreprocessingService:
         
         self.db.commit()
         return count
+
+# Alias for backward compatibility
+PreprocessingService = ContextEngineeringService

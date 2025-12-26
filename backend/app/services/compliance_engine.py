@@ -1,195 +1,91 @@
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import json
 import logging
 import traceback
+import uuid
 from sqlalchemy.orm import Session
+from datetime import datetime
+
 from ..models.rule import Rule
 from ..models.submission import Submission
 from ..models.compliance_check import ComplianceCheck
 from ..models.violation import Violation
+from ..models.compliance_state import ComplianceState
+from ..schemas.compliance_schemas import ComplianceAnalysisResult
+from ..models.agent_execution import AgentExecution
+
 from .ollama_service import ollama_service
 from .scoring_service import scoring_service
+from .content_retrieval_service import ContentRetrievalService
+from .preprocessing_service import ContextEngineeringService
+from .agents.agent_factory import AgentFactory
 
 logger = logging.getLogger(__name__)
 
-
 class ComplianceEngine:
-    """Core compliance checking engine."""
+    """
+    Refactored Compliance Engine following 12-Factor Agent principles.
+    Acts as a Stateless Reducer: State_n+1 = f(State_n, Input)
+    """
 
-    COMPLIANCE_PROMPT_TEMPLATE = """
-You are a compliance expert for insurance marketing content.
-
-Analyze the following content against these compliance rules:
-
-{rules_section}
-
-**Content to Analyze:**
-{content}
-
-**Output Format (JSON only, no other text):**
-{{
-  "violations": [
-    {{
-      "category": "irdai|brand|seo",
-      "severity": "critical|high|medium|low",
-      "rule_id": "rule identifier from above",
-      "description": "Brief violation description",
-      "location": "Line/section reference",
-      "current_text": "Problematic text excerpt (max 200 chars)",
-      "suggested_fix": "Corrected version",
-      "auto_fixable": true/false
-    }}
-  ],
-  "overall_assessment": "Brief 10 sentence summary of compliance status",
-  "key_issues": ["issue 1", "issue 2", "issue 3"]
-}}
-
-**Important:**
-- Return ONLY valid JSON, no markdown or other text
-- Be specific about violations
-- Provide actionable suggestions
-- Reference actual rule IDs
-"""
+    # Template moved to ContextEngineeringService
+    # COMPLIANCE_PROMPT_TEMPLATE = ...
 
     @staticmethod
     async def analyze_submission(submission_id: str, db: Session) -> ComplianceCheck:
         """
-        Analyze a submission for compliance (CHUNK-AWARE).
-
-        Workflow:
-        1. Load submission
-        2. Get chunks via ContentRetrievalService (backward compatible)
-        3. Load active rules
-        4. Process each chunk through Ollama
-        5. Aggregate violations with chunk references
-        6. Calculate scores
-        7. Store results
+        Entry point for compliance analysis (Backward Compatible).
+        Orchestrates the stateless flow in a loop for now (until API supports pause/resume).
         """
         try:
-            # 1. Load submission
+            # 1. Initialize State
             submission = db.query(Submission).filter(Submission.id == submission_id).first()
             if not submission:
                 raise ValueError(f"Submission {submission_id} not found")
-
-            logger.info(f"Analyzing submission: {submission.title}")
 
             # Update status
             submission.status = "analyzing"
             db.commit()
 
-            # 2. Get chunks via ContentRetrievalService (handles both chunked and legacy)
-            from .content_retrieval_service import ContentRetrievalService
+            # Initialize Compliance State
+            state = ComplianceEngine.initialize_state(submission_id, submission.project_id)
+            
+            # Load Rules & Content (Context)
+            # In a fully stateless world, these might be passed in or loaded per step.
+            # For efficiency here, we load them once and pass them conceptually to the steps.
+            rules = ComplianceEngine._load_active_rules(db, submission.project_id)
             content_service = ContentRetrievalService(db)
             chunks = content_service.get_analyzable_content(submission_id)
+            context_service = ContextEngineeringService(db)
             
-            logger.info(f"Processing {len(chunks)} chunk(s) for analysis")
-
-            # 3. Load active rules (scoped to project)
-            rules = ComplianceEngine._load_active_rules(db, submission.project_id)
-
-            # 4. Process each chunk
-            all_violations = []
+            state.total_chunks = len(chunks)
+            state.metadata["chunks_ids"] = [str(c.id) for c in chunks]
             
+            logger.info(f"Starting analysis for {submission_id} with {len(chunks)} chunks")
+
+            # 2. Run Workflow (Explicit Control Flow)
+            # Transition: Initialized -> Chunk Analysis
+            state.transition_to("analysis_running")
+            
+            # Process ALL chunks (This could be broken down into individual job steps)
             for chunk in chunks:
-                logger.info(f"Analyzing chunk {chunk.chunk_index + 1}/{len(chunks)}")
-                
-                # Build prompt with chunk content
-                prompt = ComplianceEngine._build_compliance_prompt(
-                    content=chunk.text,
-                    rules=rules
-                )
-
-                # Send to Ollama
-                response = await ollama_service.generate_response(
-                    prompt=prompt,
-                    system_prompt="You are a compliance expert. Return ONLY valid JSON."
-                )
-
-                # Parse response
-                analysis_result = ComplianceEngine._parse_ollama_response(response)
-                
-                # Attach chunk reference to each violation
-                for violation_data in analysis_result["violations"]:
-                    # Build location string with chunk reference
-                    location = f"chunk:{chunk.id}"
-                    
-                    # Add metadata info if available
-                    if chunk.metadata.get("page_number"):
-                        location += f":page:{chunk.metadata['page_number']}"
-                    elif chunk.metadata.get("char_offset_start") is not None:
-                        location += f":offset:{chunk.metadata['char_offset_start']}"
-                    
-                    violation_data["location"] = location
-                    violation_data["chunk_index"] = chunk.chunk_index
-                    
-                all_violations.extend(analysis_result["violations"])
-
-            # 6. Calculate scores (Phase 2: Pass DB session for rule-based scoring)
-            scores = scoring_service.calculate_scores(all_violations, db=db)
-
-            # 7. Store results
-            compliance_check = ComplianceCheck(
-                submission_id=submission.id,
-                overall_score=scores["overall"],
-                irdai_score=scores["irdai"],
-                brand_score=scores["brand"],
-                seo_score=scores["seo"],
-                status=scores["status"],
-                grade=scores["grade"],
-                ai_summary=f"Analyzed {len(chunks)} chunk(s). {analysis_result.get('overall_assessment', '')}"
-            )
-            db.add(compliance_check)
-            db.flush()
-
-            # Store violations
-            import uuid  # Import here or at top
-
-            for violation_data in all_violations:
-                # Find rule by ID (if provided)
-                rule = None
-                rule_id = violation_data.get("rule_id")
-                
-                if rule_id:
-                    # 1. Validate UUID format
-                    is_valid_uuid = False
-                    try:
-                        uuid.UUID(str(rule_id))
-                        is_valid_uuid = True
-                    except (ValueError, TypeError):
-                        pass
-
-                    if is_valid_uuid:
-                        try:
-                            # 2. Use nested transaction (SAVEPOINT)
-                            with db.begin_nested():
-                                rule = db.query(Rule).filter(Rule.id == rule_id).first()
-                        except Exception:
-                            # Ignore DB errors here to prevent failing the whole transaction
-                            pass
-
-                violation = Violation(
-                    check_id=compliance_check.id,
-                    rule_id=rule.id if rule else None,
-                    severity=violation_data["severity"],
-                    category=violation_data["category"],
-                    description=violation_data["description"],
-                    location=violation_data.get("location", ""),
-                    current_text=violation_data.get("current_text", ""),
-                    suggested_fix=violation_data.get("suggested_fix", ""),
-                    is_auto_fixable=violation_data.get("auto_fixable", False)
-                )
-                db.add(violation)
-
-            # Update submission status
-            submission.status = "analyzed"
-            db.commit()
-
-            logger.info(f"Analysis complete. Score: {scores['overall']}, Status: {scores['status']}")
-
+                state = await ComplianceEngine.process_chunk_step(state, chunk, rules, context_service)
+            
+            # Transition: Analysis -> Scoring
+            state.transition_to("scoring")
+            state = ComplianceEngine.scoring_step(state, db)
+            
+            # Transition: Scoring -> Finalizing
+            state.transition_to("finalizing")
+            compliance_check = ComplianceEngine.persist_results(state, db)
+            
+            state.transition_to("completed")
+            state.status = "completed"
+            
+            logger.info(f"Analysis complete. Score: {state.scores.get('overall', 0)}")
             return compliance_check
 
         except Exception as e:
-            # Print full traceback to help debug
             traceback.print_exc()
             logger.error(f"Error analyzing submission: {str(e)}")
             if submission:
@@ -198,85 +94,210 @@ Analyze the following content against these compliance rules:
             raise
 
     @staticmethod
+    def initialize_state(submission_id: str, project_id: Optional[str]) -> ComplianceState:
+        """Create initial empty state."""
+        return ComplianceState(
+            submission_id=str(submission_id),
+            project_id=str(project_id) if project_id else None,
+            current_step="initialized",
+            status="running"
+        )
+
+    @staticmethod
+    async def process_chunk_step(
+        state: ComplianceState, 
+        chunk: Any, 
+        rules: Dict[str, List[Rule]],
+        context_service: ContextEngineeringService
+    ) -> ComplianceState:
+        """
+        Stateless step: Takes current state + chunk + rules -> returns updated state with new violations.
+        Uses Factor 10: Configurble Sub-Agents.
+        """
+        logger.info(f"Processing chunk {chunk.chunk_index}")
+        
+        # 1. Identify required agents based on available rules
+        active_categories = [cat for cat, rules in rules.items() if rules]
+        
+        new_violations = []
+
+        # 2. Iterate through categories and spawn agents (Factor 10)
+        # 2. Iterate through categories and spawn agents (Factor 10)
+        for category in active_categories:
+            category_rules = rules[category]
+            
+            # Spawn Agent via Factory
+            agent = AgentFactory.create_agent(category, context_service)
+            
+            logger.info(f"Invoking {category} agent for chunk {chunk.chunk_index}")
+            
+            # Create Execution Record
+            execution = AgentExecution(
+                agent_type=category,
+                session_id=uuid.UUID(state.submission_id), # Assuming submission_id is session for now, or generate new
+                project_id=uuid.UUID(state.project_id) if state.project_id else None,
+                status="running",
+                input_data={"chunk_index": chunk.chunk_index, "text_preview": chunk.text[:100]}
+            )
+            db = context_service.db # Access DB from context service or pass it in. Wait, process_chunk_step signature doesn't have db.
+            # I need to check where db comes from. process_chunk_step signature:
+            # async def process_chunk_step(state, chunk, rules, context_service)
+            # context_service has self.db. I verified initialization in analyze_submission: context_service = ContextEngineeringService(db)
+            
+            context_service.db.add(execution)
+            context_service.db.commit() # Commit to get ID
+            
+            try:
+                # Agent Analysis
+                analysis_result = await agent.analyze(
+                    content=chunk.text, 
+                    rules=category_rules,
+                    execution_id=str(execution.id),
+                    db=context_service.db
+                )
+                
+                # Update Execution Success
+                execution.status = "completed"
+                execution.output_data = analysis_result.model_dump(mode='json')
+                execution.completed_at = datetime.now()
+                context_service.db.commit()
+
+                # Accumulate Results
+                for v in analysis_result.violations:
+                    enriched_v = v.model_dump()
+                    enriched_v["chunk_id"] = str(chunk.id)
+                    enriched_v["chunk_index"] = chunk.chunk_index
+                    
+                    # Build location string
+                    loc = f"chunk:{chunk.id}"
+                    if chunk.metadata.get("page_number"):
+                        loc += f":page:{chunk.metadata['page_number']}"
+                    elif chunk.metadata.get("char_offset_start") is not None:
+                        loc += f":offset:{chunk.metadata['char_offset_start']}"
+                    enriched_v["location"] = loc
+                    
+                    new_violations.append(enriched_v)
+
+                # Accumulate overall assessments
+                if analysis_result.overall_assessment:
+                    if "assessments" not in state.metadata:
+                        state.metadata["assessments"] = []
+                    state.metadata["assessments"].append(f"[{category.upper()}]: {analysis_result.overall_assessment}")
+            
+            except Exception as e:
+                logger.error(f"Agent {category} execution failed: {e}")
+                execution.status = "failed"
+                execution.output_data = {"error": str(e)}
+                execution.completed_at = datetime.now()
+                context_service.db.commit()
+                # Continue process? Yes, fail gracefully for one agent shouldn't kill whole process ideally
+                # But for now we just log
+
+        # Return NEW state with accumulated violations
+        state.violations.extend(new_violations)
+        state.processed_chunks += 1
+            
+        return state
+
+    @staticmethod
+    def scoring_step(state: ComplianceState, db: Session) -> ComplianceState:
+        """
+        Pure logic step: Calculate scores based on accumulated violations in state.
+        """
+        # We need to adapt the state violations to what scoring_service expects
+        # scoring_service expects a list of dicts, which matches state.violations
+        
+        scores = scoring_service.calculate_scores(state.violations, db=db)
+        state.scores = scores
+        return state
+
+    @staticmethod
+    def persist_results(state: ComplianceState, db: Session) -> ComplianceCheck:
+        """
+        Final step: Side effect to save state to DB.
+        """
+        # Save ComplianceCheck
+        compliance_check = ComplianceCheck(
+            submission_id=state.submission_id,
+            overall_score=state.scores.get("overall", 0),
+            irdai_score=state.scores.get("irdai", 0),
+            brand_score=state.scores.get("brand", 0),
+            seo_score=state.scores.get("seo", 0),
+            status=state.scores.get("status", "unknown"),
+            grade=state.scores.get("grade", "F"),
+            ai_summary=f"Analyzed {state.total_chunks} chunks. " + " ".join(state.metadata.get("assessments", [])[:2])
+        )
+        db.add(compliance_check)
+        db.flush() # Get ID
+
+        # Save Violations
+        for v_data in state.violations:
+            rule_id = v_data.get("rule_id")
+            # Basic validation for rule_id being a UUID if present
+            valid_rule_id = None
+            if rule_id:
+                try:
+                    uuid.UUID(str(rule_id))
+                    valid_rule_id = rule_id
+                except:
+                    pass
+
+            violation = Violation(
+                check_id=compliance_check.id,
+                rule_id=valid_rule_id,
+                severity=v_data.get("severity", "medium"),
+                category=v_data.get("category", "general"),
+                description=v_data.get("description", "No description"),
+                location=v_data.get("location", ""),
+                current_text=v_data.get("current_text", ""),
+                suggested_fix=v_data.get("suggested_fix", ""),
+                is_auto_fixable=v_data.get("auto_fixable", False)
+            )
+            db.add(violation)
+            
+        # Update Submission
+        submission = db.query(Submission).filter(Submission.id == state.submission_id).first()
+        if submission:
+            submission.status = "analyzed"
+        
+        db.commit()
+        return compliance_check
+
+    @staticmethod
     def _load_active_rules(db: Session, project_id: Any = None) -> Dict[str, List[Rule]]:
         """Load top active rules per category, filtered by project."""
         query = db.query(Rule).filter(Rule.is_active == True)
         
         if project_id:
-            # Fetch rules specific to this project
-            # Note: We could also include global rules (project_id is None) if desired,
-            # but for strict project isolation, we only fetch project rules.
             query = query.filter(Rule.project_id == project_id)
         else:
-            # Legacy/Global context: Fetch only global rules
             query = query.filter(Rule.project_id.is_(None))
             
         rules = query.all()
 
-        # Sort by severity weight (critical > high > medium > low)
+        # Sort by severity weight
         severity_order = {"critical": 4, "high": 3, "medium": 2, "low": 1}
         rules.sort(key=lambda r: severity_order.get(r.severity, 0), reverse=True)
 
-        grouped = {
-            "irdai": [],
-            "brand": [],
-            "seo": []
-        }
+        grouped = {"irdai": [], "brand": [], "seo": []}
 
         for rule in rules:
-            # If we haven't seen this category yet, initialize it
             if rule.category not in grouped:
                  grouped[rule.category] = []
             
-            # Limit to top 5 rules per category for context window management
-            # (Increased from 3 to 5 for better coverage in project mode)
+            # Context Window Management (Factor 3)
+            # Limit global rules, but maybe allow more for project specific?
             if len(grouped[rule.category]) < 5:
                 grouped[rule.category].append(rule)
 
         return grouped
 
-    @staticmethod
-    def _build_compliance_prompt(content: str, rules: Dict[str, List[Rule]]) -> str:
-        """Build the compliance checking prompt."""
-        rules_sections = []
-
-        # IRDAI Rules
-        if rules["irdai"]:
-            irdai_text = "**IRDAI Regulations:**\n"
-            for rule in rules["irdai"]:
-                irdai_text += f"- [ID: {rule.id}] {rule.rule_text} (Severity: {rule.severity})\n"
-            rules_sections.append(irdai_text)
-
-        # Brand Rules
-        if rules["brand"]:
-            brand_text = "**Brand Guidelines:**\n"
-            for rule in rules["brand"]:
-                brand_text += f"- [ID: {rule.id}] {rule.rule_text} (Severity: {rule.severity})\n"
-
-            rules_sections.append(brand_text)
-
-        # SEO Rules
-        if rules["seo"]:
-            seo_text = "**SEO Requirements:**\n"
-            for rule in rules["seo"]:
-                seo_text += f"- [ID: {rule.id}] {rule.rule_text} (Severity: {rule.severity})\n"
-            rules_sections.append(seo_text)
-
-        rules_section = "\n".join(rules_sections)
-
-        # Truncate content if too long (reduced to 2000 chars for faster eval)
-        truncated_content = content[:2000] if len(content) > 2000 else content
-
-        return ComplianceEngine.COMPLIANCE_PROMPT_TEMPLATE.format(
-            rules_section=rules_section,
-            content=truncated_content
-        )
+        return grouped
 
     @staticmethod
     def _parse_ollama_response(response: str) -> Dict[str, Any]:
         """Parse Ollama's JSON response."""
         try:
-            # Try to extract JSON if wrapped in markdown
             if "```json" in response:
                 start = response.find("```json") + 7
                 end = response.find("```", start)
@@ -287,25 +308,14 @@ Analyze the following content against these compliance rules:
                 response = response[start:end].strip()
 
             result = json.loads(response)
-
-            # Validate structure
+            
             if "violations" not in result:
                 result["violations"] = []
-            if "overall_assessment" not in result:
-                result["overall_assessment"] = "Analysis completed."
-
+                
             return result
 
-        except json.JSONDecodeError as e:
-            logger.error(f"Failed to parse Ollama response as JSON: {str(e)}")
-            logger.error(f"Response: {response[:500]}")
-
-            # Return empty result
-            return {
-                "violations": [],
-                "overall_assessment": "Unable to parse AI response.",
-                "key_issues": ["AI response parsing error"]
-            }
-
+        except Exception as e:
+            logger.error(f"Failed to parse Ollama response: {e}")
+            return {"violations": [], "overall_assessment": "Error parsing AI response"}
 
 compliance_engine = ComplianceEngine()

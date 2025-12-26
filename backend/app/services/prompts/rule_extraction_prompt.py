@@ -23,31 +23,33 @@ Rules to follow:
    - low: -5 to -2 points
 
 Output ONLY valid JSON in this exact format (no extra text, comments, or explanations):
-[
-  {
-    "category": "irdai",
-    "rule_text": "Clear, actionable description of the rule",
-    "severity": "critical",
-    "keywords": ["keyword1", "keyword2", "keyword3"],
-    "pattern": "optional_regex_pattern",
-    "points_deduction": -20.00
-  },
-  {
-    "category": "brand",
-    "rule_text": "Another rule description",
-    "severity": "high",
-    "keywords": ["word1", "word2", "word3"],
-    "pattern": null,
-    "points_deduction": -10.00
-  }
-]
+{
+  "rules": [
+    {
+      "category": "irdai",
+      "rule_text": "Clear, actionable description of the rule",
+      "severity": "critical",
+      "keywords": ["keyword1", "keyword2", "keyword3"],
+      "points_deduction": -20.00,
+      "confidence_score": 0.95
+    },
+    {
+      "category": "brand",
+      "rule_text": "Another rule description",
+      "severity": "high",
+      "keywords": ["word1", "word2", "word3"],
+      "points_deduction": -10.00,
+      "confidence_score": 0.88
+    }
+  ]
+}
 
 IMPORTANT:
-- Output ONLY the JSON array, nothing else
+- Output ONLY the JSON object, nothing else
 - Ensure valid JSON syntax (proper quotes, commas, brackets)
 - All numeric values must be negative decimals
 - Keywords array must have 3-5 items
-- Pattern can be null if not applicable
+- confidence_score must be between 0.0 and 1.0
 """
 
 RULE_EXTRACTION_USER_PROMPT_TEMPLATE = """Analyze the following regulatory document and extract compliance rules:
@@ -62,7 +64,7 @@ Content Length: {content_length} characters
 
 Extract 5-15 compliance rules from this document in the specified JSON format.
 Focus on the most important and actionable rules.
-Output ONLY the JSON array, no additional text."""
+Output ONLY the JSON object, no additional text."""
 
 
 def build_rule_extraction_prompt(
