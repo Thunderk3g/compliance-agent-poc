@@ -6,11 +6,16 @@ class Settings(BaseSettings):
     # Database
     database_url: str = "postgresql://compliance_user:compliance_pass@localhost:5432/compliance_db"
 
-    # Ollama/ 
-    ollama_base_url: str = "http://127.0.0.1:11434"
-    ollama_model: str = "qwen2.5:7b"
-    ollama_timeout: int = 30
-    ollama_max_retries: int = 3
+    # LLM (Gemini/OpenAI)
+    llm_api_key: str = ""
+    llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
+    llm_model: str = "gemini-2.0-flash"
+
+    # Ollama (Commented out for migration)
+    # ollama_base_url: str = "http://127.0.0.1:11434"
+    # ollama_model: str = "qwen2.5:7b"
+    # ollama_timeout: int = 30
+    # ollama_max_retries: int = 3
 
     # CORS
     api_cors_origins: List[str] = [

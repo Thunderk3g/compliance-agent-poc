@@ -18,7 +18,7 @@ from sqlalchemy.orm import Session
 from ..models.user_config import UserConfig
 from ..models.rule import Rule
 from .web_search_service import web_search_service
-from .ollama_service import ollama_service
+from .llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ class OnboardingService:
                 sources_used.append(source)
                 
                 # Generate rules from search results
-                regulatory_rules = await ollama_service.generate_rules_from_context(
+                regulatory_rules = await llm_service.generate_rules_from_context(
                     search_results=search_results,
                     industry=industry,
                     scope="regulatory"
@@ -100,7 +100,7 @@ class OnboardingService:
             )
             
             if brand_results:
-                brand_rules = await ollama_service.generate_rules_from_context(
+                brand_rules = await llm_service.generate_rules_from_context(
                     search_results=brand_results,
                     industry=industry,
                     scope="brand"
@@ -115,7 +115,7 @@ class OnboardingService:
             # Use RAG fallback for SEO (universal best practices)
             from .compliance_knowledge_base import SEO_KNOWLEDGE
             
-            seo_rules = await ollama_service.generate_rules_from_context(
+            seo_rules = await llm_service.generate_rules_from_context(
                 search_results=SEO_KNOWLEDGE,
                 industry=industry,
                 scope="seo"

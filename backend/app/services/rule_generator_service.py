@@ -12,7 +12,7 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from .ollama_service import ollama_service
+from .llm_service import llm_service
 from .content_parser import content_parser
 from .prompts.rule_extraction_prompt import (
     build_rule_extraction_prompt,
@@ -30,7 +30,7 @@ class RuleGeneratorService:
     """Service for generating compliance rules from documents using LLM."""
 
     def __init__(self):
-        self.ollama = ollama_service
+        self.llm = llm_service
         self.parser = content_parser
 
     async def generate_rules_from_document(
@@ -110,7 +110,7 @@ class RuleGeneratorService:
             # Step 4: Call Ollama for rule extraction
             logger.info("Sending document to Ollama for rule extraction...")
             try:
-                extraction_result = await self.ollama.generate_structured_response(
+                extraction_result = await self.llm.generate_structured_response(
                     prompt=prompt_data["user_prompt"],
                     output_model=RuleExtractionResult,
                     system_prompt=prompt_data["system_prompt"]
@@ -272,7 +272,7 @@ class RuleGeneratorService:
             # Step 4: Call Ollama for rule extraction
             logger.info("Sending document to Ollama for rule extraction (preview)...")
             try:
-                extraction_result = await self.ollama.generate_structured_response(
+                extraction_result = await self.llm.generate_structured_response(
                     prompt=prompt_data["user_prompt"],
                     output_model=RuleExtractionResult,
                     system_prompt=prompt_data["system_prompt"]
@@ -360,7 +360,7 @@ REFINEMENT INSTRUCTION: {refinement_instruction}
 
 Provide the refined rule text and updated keywords. Be specific and actionable."""
 
-            response = await self.ollama.generate_response(
+            response = await self.llm.generate_response(
                 prompt=user_prompt,
                 system_prompt=system_prompt
             )

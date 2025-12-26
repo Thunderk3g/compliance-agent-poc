@@ -1,4 +1,4 @@
-import httpx
+
 import json
 import asyncio
 import time
@@ -6,47 +6,71 @@ from typing import Dict, Any, Optional, List, Type, TypeVar
 from sqlalchemy.orm import Session
 from ..models.tool_invocation import ToolInvocation
 import logging
+import os
+from datetime import datetime
 from pydantic import BaseModel, ValidationError
 from ..config import settings
+from openai import AsyncOpenAI, APIConnectionError, APIStatusError
 
 T = TypeVar("T", bound=BaseModel)
 
 logger = logging.getLogger(__name__)
 
 
-class OllamaService:
-    """Service for integrating with Ollama LLM."""
+class LLMService:
+    """Service for integrating with Cloud LLMs (Gemini/OpenAI) via OpenAI API."""
 
     def __init__(self):
-        self.base_url = settings.ollama_base_url
-        self.model = settings.ollama_model
-        self.timeout = settings.ollama_timeout
-        self.max_retries = settings.ollama_max_retries
-        self.client = httpx.AsyncClient(timeout=self.timeout)
-        self.use_chat_api = True  # Try chat API first, fallback to generate
+        self.api_key = settings.llm_api_key
+        self.base_url = settings.llm_base_url
+        self.model = settings.llm_model
+        
+        # Ensure logs directory exists
+        os.makedirs("logs", exist_ok=True)
+        self.log_file = "logs/llm_interactions.json"
+        
+        # Initialize OpenAI client
+        # Note: If api_key is empty, this might raise error on instantiation or first call depending on lib version.
+        # We'll assume it's provided or handled gracefully.
+        if not self.api_key:
+             logger.warning("LLM_API_KEY is not set. LLM service will fail.")
+        
+        self.client = AsyncOpenAI(
+            api_key=self.api_key,
+            base_url=self.base_url
+        )
+
+    async def _log_interaction(self, method: str, prompt: str, system_prompt: str, context: Any, response: Any):
+        """Log interaction to JSON file for debugging."""
+        try:
+            entry = {
+                "timestamp": datetime.now().isoformat(),
+                "method": method,
+                "model": self.model,
+                "input": {
+                    "prompt": prompt,
+                    "system_prompt": system_prompt,
+                    "context": context
+                },
+                "output": response
+            }
+            
+            with open(self.log_file, "a", encoding="utf-8") as f:
+                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
+        except Exception as e:
+            logger.error(f"Failed to log LLM interaction: {e}")
 
     async def health_check(self) -> bool:
-        """Check if Ollama service is available and model is loaded."""
+        """Check if LLM service is available."""
         try:
-            url = f"{self.base_url}/api/tags"
-            response = await self.client.get(url, timeout=5)
-
-            if response.status_code != 200:
-                return False
-
-            tags_data = response.json()
-            models = [model.get("name", "") for model in tags_data.get("models", [])]
-            model_available = any(self.model in model for model in models)
-
-            if not model_available:
-                logger.warning(f"Model '{self.model}' not found. Available: {models}")
-                return False
-
-            logger.info(f"✅ Ollama service available with model '{self.model}'")
+            # Simple call to list models or just a basic chat completion
+            # listing models might not be supported by all proxies, so we try a cheap generation
+            await self.client.models.list()
+            logger.info(f"✅ LLM service available with model '{self.model}'")
             return True
 
         except Exception as e:
-            logger.warning(f"Ollama health check failed: {str(e)}")
+            logger.warning(f"LLM health check failed: {str(e)}")
             return False
 
     async def generate_response(
@@ -55,27 +79,22 @@ class OllamaService:
         system_prompt: str = None,
         context: Dict[str, Any] = None
     ) -> str:
-        """Generate response from Ollama with retry mechanism."""
-        for attempt in range(self.max_retries):
-            try:
-                if self.use_chat_api:
-                    messages = self._build_chat_messages(prompt, system_prompt, context)
-                    response = await self._call_ollama_chat(messages)
-                else:
-                    full_prompt = self._build_prompt(prompt, system_prompt, context)
-                    response = await self._call_ollama_generate(full_prompt)
+        """Generate response from LLM."""
+        messages = self._build_chat_messages(prompt, system_prompt, context)
+        
+        try:
+            response = await self.client.chat.completions.create(
+                model=self.model,
+                messages=messages,
+                temperature=0.7
+            )
+            response_content = response.choices[0].message.content.strip()
+            await self._log_interaction("generate_response", prompt, system_prompt, context, response_content)
+            return response_content
 
-                return response
-
-            except Exception as e:
-                logger.warning(f"Ollama attempt {attempt + 1} failed: {str(e)}")
-
-                if attempt == self.max_retries - 1:
-                    logger.error("All Ollama attempts failed. Returning fallback response.")
-                    return self._get_fallback_response(prompt, context)
-
-                # Exponential backoff: 1s, 2s, 4s
-                await asyncio.sleep(2 ** attempt)
+        except Exception as e:
+            logger.error(f"LLM generation failed: {str(e)}")
+            return self._get_fallback_response(prompt, context)
 
     async def generate_structured_response(
         self,
@@ -88,8 +107,7 @@ class OllamaService:
         tool_name: str = "llm_structured"
     ) -> T:
         """
-        Generate a structured response validated against a Pydantic model (Factor 4).
-        Implements Factor 9: Compact Errors into Context Window on failure.
+        Generate a structured response validated against a Pydantic model.
         """
         # Append schema instructions to system prompt
         schema_instruction = (
@@ -98,18 +116,29 @@ class OllamaService:
             f"Return ONLY the JSON object, no other text."
         )
         full_system_prompt = (system_prompt or "") + schema_instruction
-
-        current_prompt = prompt
         
-        for attempt in range(self.max_retries):
+        # We generally use response_format={"type": "json_object"} if supported,
+        # but generic OpenAI compatible endpoints might variable support.
+        # We will try robust prompting first (which we already added above).
+        
+        messages = self._build_chat_messages(prompt, full_system_prompt, context)
+        start_time = time.time()
+        
+        # Simple retry logic (simplified from Ollama service)
+        max_retries = 3
+        current_messages = messages
+        
+        for attempt in range(max_retries):
             try:
-                response_text = await self.generate_response(
-                    prompt=current_prompt,
-                    system_prompt=full_system_prompt,
-                    context=context
+                response = await self.client.chat.completions.create(
+                    model=self.model,
+                    messages=current_messages,
+                    temperature=0.2, # Lower temperature for structured output
+                    response_format={"type": "json_object"} 
                 )
+                response_text = response.choices[0].message.content.strip()
                 
-                # Parse and Clean JSON
+                # Parse and Clean JSON (in case response format didn't work perfectly or extra text)
                 if "```json" in response_text:
                     start = response_text.find("```json") + 7
                     end = response_text.find("```", start)
@@ -122,6 +151,8 @@ class OllamaService:
                 # Validate
                 result = output_model.model_validate_json(response_text)
                 
+                end_time = time.time()
+                
                 # Record metrics if execution_id is provided
                 if execution_id and db:
                      await self._record_tool_invocation(
@@ -130,25 +161,35 @@ class OllamaService:
                         tool_name=tool_name,
                         input_data={"prompt": prompt[:500], "system": system_prompt[:200] if system_prompt else None},
                         output_data=result.model_dump(mode='json'),
-                        start_time=time.time(), # This is inaccurate as it's after execution, but acceptable for now or need to move start_time up
-                        end_time=time.time(),
+                        start_time=start_time,
+                        end_time=end_time,
                         tokens=len(prompt) + len(response_text) # Rough estimate
                      )
                 
+                # Log successful structured response
+                await self._log_interaction(
+                    "generate_structured_response", 
+                    prompt, 
+                    full_system_prompt, 
+                    context, 
+                    result.model_dump(mode='json')
+                )
+                
                 return result
 
-            except (ValidationError, json.JSONDecodeError) as e:
-                logger.warning(f"Structured geneation attempt {attempt + 1} failed: {e}")
+            except (ValidationError, json.JSONDecodeError, Exception) as e:
+                logger.warning(f"Structured generation attempt {attempt + 1} failed: {e}")
                 
-                if attempt == self.max_retries - 1:
+                if attempt == max_retries - 1:
                     raise e
                     
-                # Factor 9: Feed error back into context
+                # Feed error back into context
                 error_feedback = f"\n\nPrevious response was invalid JSON or did not match schema. Error: {str(e)}. \nPlease CORRECT the JSON output."
-                current_prompt += error_feedback
+                # Append to messages as user message
+                current_messages.append({"role": "assistant", "content": response_text if 'response_text' in locals() else ""})
+                current_messages.append({"role": "user", "content": error_feedback})
                 
                 await asyncio.sleep(1)
-
 
     def _build_chat_messages(
         self,
@@ -156,7 +197,7 @@ class OllamaService:
         system_prompt: str = None,
         context: Dict[str, Any] = None
     ) -> List[Dict[str, str]]:
-        """Build messages array for Ollama chat API."""
+        """Build messages array for Chat API."""
         messages = []
 
         # Add system message
@@ -176,65 +217,8 @@ class OllamaService:
 
         return messages
 
-    def _build_prompt(
-        self,
-        prompt: str,
-        system_prompt: str = None,
-        context: Dict[str, Any] = None
-    ) -> str:
-        """Build single prompt string for generate API."""
-        parts = []
-
-        if system_prompt:
-            parts.append(f"System: {system_prompt}")
-
-        if context:
-            parts.append(f"Context: {json.dumps(context)}")
-
-        parts.append(f"User: {prompt}")
-
-        return "\n\n".join(parts)
-
-    async def _call_ollama_chat(self, messages: List[Dict[str, str]]) -> str:
-        """Call Ollama chat API."""
-        url = f"{self.base_url}/api/chat"
-        data = {
-            "model": self.model,
-            "messages": messages,
-            "stream": False
-        }
-
-        try:
-            response = await self.client.post(url, json=data)
-            response.raise_for_status()
-            result = response.json()
-            return result.get("message", {}).get("content", "").strip()
-
-        except httpx.HTTPStatusError as e:
-            if e.response.status_code == 404 and self.use_chat_api:
-                # Fallback to generate API
-                logger.info("Chat API not available, falling back to generate API")
-                self.use_chat_api = False
-                prompt = self._build_prompt(messages[-1]["content"])
-                return await self._call_ollama_generate(prompt)
-            raise
-
-    async def _call_ollama_generate(self, prompt: str) -> str:
-        """Call Ollama generate API."""
-        url = f"{self.base_url}/api/generate"
-        data = {
-            "model": self.model,
-            "prompt": prompt,
-            "stream": False
-        }
-
-        response = await self.client.post(url, json=data)
-        response.raise_for_status()
-        result = response.json()
-        return result.get("response", "").strip()
-
     def _get_fallback_response(self, prompt: str, context: Dict[str, Any]) -> str:
-        """Fallback response when Ollama is unavailable."""
+        """Fallback response when LLM is unavailable."""
         return json.dumps({
             "violations": [],
             "overall_assessment": "AI analysis service temporarily unavailable. Please try again later.",
@@ -249,21 +233,10 @@ class OllamaService:
     ) -> List[Dict[str, Any]]:
         """
         Generate structured compliance rules from search results.
-        
-        Used during onboarding to extract actionable rules from
-        regulatory documents and best practices.
-        
-        Args:
-            search_results: List of search results with title, snippet, url
-            industry: Industry context (e.g., "insurance")
-            scope: Rule scope ("regulatory", "brand", "seo")
-            
-        Returns:
-            List of rule dicts with category, severity, rule_text, keywords
         """
         # Map scope to category
         category_map = {
-            "regulatory": "irdai",  # Can be made dynamic per industry
+            "regulatory": "irdai",
             "brand": "brand",
             "seo": "seo",
             "qualitative": "brand"
@@ -368,6 +341,7 @@ Return ONLY the JSON array, no other text.
                 end = response.find("```", start)
                 response = response[start:end].strip()
             
+            # Simple fix for potential trailing commas or formatting issues could go here
             rules_data = json.loads(response)
             
             # Ensure it's a list
@@ -403,19 +377,6 @@ Return ONLY the JSON array, no other text.
     ) -> Dict[str, Any]:
         """
         Analyze a single line for compliance violations.
-        
-        Used by Deep Compliance Research Mode.
-        LLM role is LIMITED to violation detection and context generation.
-        Score calculation is handled by deterministic Python code.
-        
-        Args:
-            line_content: The text of the line to analyze
-            line_number: Position in document
-            document_context: Document title for context
-            rules: List of rule dicts with id, category, rule_text, severity, keywords
-        
-        Returns:
-            dict with 'relevance_context' and 'violations' list
         """
         from .prompts.deep_analysis_prompt import (
             build_deep_analysis_prompt,
@@ -455,7 +416,8 @@ Return ONLY the JSON array, no other text.
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        await self.client.aclose()
+        if self.client:
+           await self.client.close()
 
 
     async def _record_tool_invocation(
@@ -471,11 +433,6 @@ Return ONLY the JSON array, no other text.
     ):
         """Record tool invocation metrics to DB."""
         try:
-            # Run in sync wrapper if needed, but for now assuming db session is thread-safe or handled
-            # Since this calls DB, we might want to do it via sync_to_async or similar if strictly async
-            # But SQLAlchemy async session usage might differ. 
-            # Assuming standard sync session passed from calls.
-            # We'll calculate duration and crude cost estimate
             duration_ms = int((end_time - start_time) * 1000)
             cost = (tokens / 1000) * 0.0001 # Dummy cost model
             
@@ -495,4 +452,4 @@ Return ONLY the JSON array, no other text.
             logger.error(f"Failed to record tool invocation: {e}")
 
 # Singleton instance
-ollama_service = OllamaService()
+llm_service = LLMService()

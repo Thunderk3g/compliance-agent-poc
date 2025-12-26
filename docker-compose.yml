@@ -49,22 +49,7 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
 
-  ollama:
-    image: ollama/ollama:latest
-    container_name: compliance-ollama
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_data:/root/.ollama
-    networks:
-      - compliance-network
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: 1
-              capabilities: [ gpu ]
+
 
   backend:
     build: ./backend
@@ -72,10 +57,13 @@ services:
     environment:
       - DATABASE_URL=postgresql://compliance_user:compliance_pass@postgres:5432/compliance_db
       - REDIS_URL=redis://redis:6379/0
-      - OLLAMA_BASE_URL=http://ollama:11434
-      - OLLAMA_MODEL=qwen2.5:7b
-      - OLLAMA_TIMEOUT=160
-      - OLLAMA_MAX_RETRIES=3
+      # - OLLAMA_BASE_URL=http://ollama:11434
+      # - OLLAMA_MODEL=qwen2.5:7b
+      # - OLLAMA_TIMEOUT=160
+      # - OLLAMA_MAX_RETRIES=3
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+      - LLM_MODEL=gemini-2.0-flash
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
     ports:
@@ -88,8 +76,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      ollama:
-        condition: service_started
+      # ollama:
+      #   condition: service_started
     networks:
       - compliance-network
     command: >

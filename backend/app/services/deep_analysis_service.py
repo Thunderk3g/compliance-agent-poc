@@ -26,7 +26,7 @@ from ..models.deep_analysis import DeepAnalysis
 from ..models.compliance_check import ComplianceCheck
 from ..models.submission import Submission
 from ..schemas.deep_analysis import SeverityWeights, RuleImpact, LineAnalysisResult
-from .ollama_service import ollama_service
+from .llm_service import llm_service
 from .content_retrieval_service import ContentRetrievalService
 
 logger = logging.getLogger(__name__)
@@ -102,7 +102,7 @@ class DeepAnalysisService:
             "keywords": r.keywords or []
         } for r in active_rules]
         
-        return await ollama_service.analyze_line_for_violations(
+        return await llm_service.analyze_line_for_violations(
             line_content=line_content,
             line_number=line_number,
             document_context=document_context,

@@ -14,7 +14,7 @@ from ..models.compliance_state import ComplianceState
 from ..schemas.compliance_schemas import ComplianceAnalysisResult
 from ..models.agent_execution import AgentExecution
 
-from .ollama_service import ollama_service
+from .llm_service import llm_service
 from .scoring_service import scoring_service
 from .content_retrieval_service import ContentRetrievalService
 from .preprocessing_service import ContextEngineeringService
