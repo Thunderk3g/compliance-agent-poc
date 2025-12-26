@@ -25,10 +25,6 @@ class LLMService:
         self.base_url = settings.llm_base_url
         self.model = settings.llm_model
         
-        # Ensure logs directory exists
-        os.makedirs("logs", exist_ok=True)
-        self.log_file = "logs/llm_interactions.json"
-        
         # Initialize OpenAI client
         # Note: If api_key is empty, this might raise error on instantiation or first call depending on lib version.
         # We'll assume it's provided or handled gracefully.
@@ -39,26 +35,6 @@ class LLMService:
             api_key=self.api_key,
             base_url=self.base_url
         )
-
-    async def _log_interaction(self, method: str, prompt: str, system_prompt: str, context: Any, response: Any):
-        """Log interaction to JSON file for debugging."""
-        try:
-            entry = {
-                "timestamp": datetime.now().isoformat(),
-                "method": method,
-                "model": self.model,
-                "input": {
-                    "prompt": prompt,
-                    "system_prompt": system_prompt,
-                    "context": context
-                },
-                "output": response
-            }
-            
-            with open(self.log_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps(entry, ensure_ascii=False) + "\n")
-        except Exception as e:
-            logger.error(f"Failed to log LLM interaction: {e}")
 
     async def health_check(self) -> bool:
         """Check if LLM service is available."""
@@ -88,9 +64,7 @@ class LLMService:
                 messages=messages,
                 temperature=0.7
             )
-            response_content = response.choices[0].message.content.strip()
-            await self._log_interaction("generate_response", prompt, system_prompt, context, response_content)
-            return response_content
+            return response.choices[0].message.content.strip()
 
         except Exception as e:
             logger.error(f"LLM generation failed: {str(e)}")
@@ -165,15 +139,6 @@ class LLMService:
                         end_time=end_time,
                         tokens=len(prompt) + len(response_text) # Rough estimate
                      )
-                
-                # Log successful structured response
-                await self._log_interaction(
-                    "generate_structured_response", 
-                    prompt, 
-                    full_system_prompt, 
-                    context, 
-                    result.model_dump(mode='json')
-                )
                 
                 return result
 
