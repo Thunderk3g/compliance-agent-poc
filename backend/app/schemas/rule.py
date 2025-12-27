@@ -91,6 +91,8 @@ class RuleResponse(RuleBase):
     id: uuid.UUID
     created_by: Optional[uuid.UUID] = None
     created_at: datetime
+    project_id: Optional[uuid.UUID] = None
+    source_guideline_id: Optional[uuid.UUID] = None
 
     class Config:
         from_attributes = True

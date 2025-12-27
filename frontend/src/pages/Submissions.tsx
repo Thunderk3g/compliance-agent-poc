@@ -43,6 +43,20 @@ export const Submissions: React.FC = () => {
     }
   };
 
+  const handlePreprocess = async (id: string) => {
+    setActionLoading(prev => ({ ...prev, [id]: true }));
+    try {
+      await api.triggerPreprocessing(id);
+      // Refresh submissions to show new status
+      await fetchSubmissions();
+    } catch (error) {
+      console.error('Preprocessing failed:', error);
+      alert('Preprocessing failed. Please try again.');
+    } finally {
+      setActionLoading(prev => ({ ...prev, [id]: false }));
+    }
+  };
+
   const handleDelete = async (id: string) => {
     if (!confirm('Are you sure you want to delete this submission? This action cannot be undone.')) {
       return;
@@ -176,9 +190,21 @@ export const Submissions: React.FC = () => {
                 </td>
                 <td className="px-6 py-4 whitespace-nowrap text-sm">
                   <div className="flex gap-2">
-                    {/* Show Analyze button for uploaded, preprocessed, or legacy pending status */}
-                    {(submission.status === 'uploaded' ||
-                      submission.status === 'preprocessed' ||
+                    {/* Preprocess Button - Only for 'uploaded' or legacy 'pending' status */}
+                    {(submission.status === 'uploaded' || submission.status === 'pending') && (
+                      <button
+                        onClick={() => handlePreprocess(submission.id)}
+                        disabled={actionLoading[submission.id]}
+                        className={`font-medium px-3 py-1 rounded ${actionLoading[submission.id]
+                          ? 'bg-purple-100 text-purple-400 cursor-not-allowed'
+                          : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+                      >
+                        {actionLoading[submission.id] ? 'Chunking...' : 'Preprocess'}
+                      </button>
+                    )}
+
+                    {/* Analyze Button - Only for 'preprocessed' or legacy 'pending' status */}
+                    {(submission.status === 'preprocessed' ||
                       submission.status === 'pending') && (
                         <button
                           onClick={() => handleAnalyze(submission.id)}
@@ -193,8 +219,8 @@ export const Submissions: React.FC = () => {
 
                     {/* Show progress for preprocessing/analyzing */}
                     {(submission.status === 'preprocessing' || submission.status === 'analyzing') && (
-                      <span className="text-blue-600 font-medium px-3 py-1">
-                        {submission.status === 'preprocessing' ? 'Chunking...' : 'Analyzing...'}
+                      <span className="text-blue-600 font-medium px-3 py-1 animate-pulse">
+                        {submission.status === 'preprocessing' ? 'Chunking Content...' : 'Running Compliance Checks...'}
                       </span>
                     )}
 

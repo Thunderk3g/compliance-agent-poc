@@ -26,7 +26,8 @@ from ..models.deep_analysis import DeepAnalysis
 from ..models.compliance_check import ComplianceCheck
 from ..models.submission import Submission
 from ..schemas.deep_analysis import SeverityWeights, RuleImpact, LineAnalysisResult
-from .ollama_service import ollama_service
+from .llm_service import llm_service
+from .content_retrieval_service import ContentRetrievalService
 
 logger = logging.getLogger(__name__)
 
@@ -101,7 +102,7 @@ class DeepAnalysisService:
             "keywords": r.keywords or []
         } for r in active_rules]
         
-        return await ollama_service.analyze_line_for_violations(
+        return await llm_service.analyze_line_for_violations(
             line_content=line_content,
             line_number=line_number,
             document_context=document_context,
@@ -190,13 +191,15 @@ class DeepAnalysisService:
         active_rules = db.query(Rule).filter(Rule.is_active == True).all()
         logger.info(f"Found {len(active_rules)} active rules")
         
-        # Step 1: Segment document (DETERMINISTIC)
-        content = submission.original_content or ""
-        segments = self.segment_document(content)
+        # Step 1: Get chunks via ContentRetrievalService (CHUNK-AWARE)
+        content_service = ContentRetrievalService(db)
+        chunks = content_service.get_analyzable_content(submission_id)
         
-        if not segments:
+        if not chunks:
             logger.warning("No content to analyze")
             return self._build_empty_response(check, submission, severity_weights)
+        
+        logger.info(f"Analyzing {len(chunks)} chunk(s) for deep analysis")
         
         # Store severity config snapshot
         config_snapshot = severity_weights.model_dump()
@@ -204,39 +207,43 @@ class DeepAnalysisService:
         results = []
         total_score = 0.0
         
-        # Step 2 & 3: Analyze each line (AI + Deterministic scoring)
-        for i, segment in enumerate(segments):
-            logger.debug(f"Analyzing line {segment['line_number']} ({i+1}/{len(segments)})")
+        # Step 2 & 3: Analyze each chunk (AI + Deterministic scoring)
+        for i, chunk in enumerate(chunks):
+            logger.debug(f"Analyzing chunk {chunk.chunk_index + 1}/{len(chunks)}")
             
             # AI: Detect violations (non-deterministic)
             ai_result = await self.detect_violations_with_ai(
-                line_content=segment["line_content"],
-                line_number=segment["line_number"],
+                line_content=chunk.text,
+                line_number=chunk.chunk_index + 1,  # For prompt compatibility
                 document_context=submission.title,
                 active_rules=active_rules
             )
             
             # Python: Calculate score (DETERMINISTIC)
-            line_score, impacts = self.calculate_line_score(
+            chunk_score, impacts = self.calculate_line_score(
                 base_score=100.0,
                 violations=ai_result.get("violations", []),
                 severity_weights=severity_weights
             )
             
-            # Build line result (will be stored in JSON)
-            line_result = {
-                "line_number": segment["line_number"],
-                "line_content": segment["line_content"],
-                "line_score": round(line_score, 2),
+            # Build chunk result (will be stored in JSON)
+            # Store chunk_id for frontend mapping
+            chunk_result = {
+                "chunk_id": str(chunk.id),
+                "chunk_index": chunk.chunk_index,
+                "chunk_content": chunk.text[:200] + "..." if len(chunk.text) > 200 else chunk.text,  # Preview
+                "chunk_score": round(chunk_score, 2),
+                "token_count": chunk.token_count,
+                "metadata": chunk.metadata,  # Preserve source location info
                 "relevance_context": ai_result.get("relevance_context", ""),
                 "rule_impacts": [imp.model_dump() for imp in impacts]
             }
-            results.append(line_result)
-            total_score += line_score
+            results.append(chunk_result)
+            total_score += chunk_score
         
         # Calculate summary stats
         avg_score = total_score / len(results) if results else 100.0
-        scores = [r["line_score"] for r in results]
+        scores = [r["chunk_score"] for r in results]
         min_score = min(scores) if scores else 100.0
         max_score = max(scores) if scores else 100.0
         
@@ -246,19 +253,19 @@ class DeepAnalysisService:
         # Create single record with all data
         deep_record = DeepAnalysis(
             check_id=check.id,
-            total_lines=len(results),
+            total_lines=len(results),  # Field name kept for DB compatibility, but contains chunk count
             average_score=Decimal(str(round(avg_score, 2))),
             min_score=Decimal(str(round(min_score, 2))),
             max_score=Decimal(str(round(max_score, 2))),
             document_title=submission.title,
             severity_config_snapshot=config_snapshot,
-            analysis_data=results  # All lines as JSON array
+            analysis_data=results  # All chunks as JSON array
         )
         db.add(deep_record)
         db.commit()
         
         logger.info(
-            f"Deep analysis complete: {len(results)} lines stored as single JSON, "
+            f"Deep analysis complete: {len(results)} chunk(s) stored as single JSON, "
             f"avg={avg_score:.2f}, min={min_score:.2f}, max={max_score:.2f}"
         )
         

@@ -22,6 +22,7 @@ router = APIRouter(prefix="/api/submissions", tags=["submissions"])
 async def upload_submission(
     title: str = Form(...),
     content_type: str = Form(...),
+    project_id: uuid.UUID = Form(None),
     file: UploadFile = File(...),
     db: Session = Depends(get_db)
 ):
@@ -58,7 +59,8 @@ async def upload_submission(
             content_type=content_type,
             original_content=parsed_content,
             file_path=file_path,
-            status="uploaded"  # NEW STATUS for chunked workflow
+            status="uploaded",  # NEW STATUS for chunked workflow
+            project_id=project_id
         )
 
         db.add(submission)
@@ -75,6 +77,7 @@ async def upload_submission(
 def list_submissions(
     skip: int = 0,
     limit: int = 50,
+    project_id: uuid.UUID = None,
     db: Session = Depends(get_db)
 ):
     """List all submissions."""
@@ -82,14 +85,20 @@ def list_submissions(
     from ...models.deep_analysis import DeepAnalysis
 
     # Join with ComplianceCheck and DeepAnalysis to detect if deep analysis exists
-    results = db.query(
+    query = db.query(
         Submission,
         func.count(DeepAnalysis.id) > 0
     ).outerjoin(
         ComplianceCheck, Submission.id == ComplianceCheck.submission_id
     ).outerjoin(
         DeepAnalysis, ComplianceCheck.id == DeepAnalysis.check_id
-    ).group_by(
+    )
+
+    # Filter by project_id if provided
+    if project_id:
+        query = query.filter(Submission.project_id == project_id)
+
+    results = query.group_by(
         Submission.id
     ).order_by(
         Submission.submitted_at.desc()
@@ -178,10 +187,19 @@ def delete_submission(
 
     # Delete physical file if exists
     if submission.file_path and os.path.exists(submission.file_path):
-        os.remove(submission.file_path)
+        try:
+            os.remove(submission.file_path)
+        except Exception as e:
+            # Log error but continue with DB deletion
+            # In a real app, might want to schedule a cleanup job for orphaned files
+            pass
 
-    db.delete(submission)
-    db.commit()
+    try:
+        db.delete(submission)
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(500, f"Database error during deletion: {str(e)}")
 
     return {"message": "Submission deleted successfully"}
 

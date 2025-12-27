@@ -4,7 +4,7 @@ import logging
 import json
 import uuid
 from ..models.rule import Rule
-from .ollama_service import ollama_service
+from .llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ class RuleMatcherService:
             )
             
             # Call Ollama for semantic matching
-            response_text = await ollama_service.generate_response(
+            response_text = await llm_service.generate_response(
                 prompt=prompt["user_prompt"],
                 system_prompt=prompt["system_prompt"]
             )
@@ -145,7 +145,7 @@ If no rule is semantically similar (confidence < 0.7), set matched_rule_index to
     ) -> Optional[Dict]:
         """Parse AI response and extract matched rule."""
         try:
-            # Extract JSON from response
+            # Extract JSON from response    
             response_text = response_text.strip()
             
             # Handle markdown code blocks

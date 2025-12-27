@@ -1,3 +1,6 @@
+﻿import logging
+logger = logging.getLogger(__name__)
+
 """Content Retrieval Service
 
 Unified abstraction layer for accessing submission content.
@@ -61,11 +64,48 @@ class ContentRetrievalService:
         if not submission:
             raise ValueError(f"Submission {submission_id} not found")
         
-        # Check if submission has been preprocessed into chunks
-        if submission.status == "preprocessed" and submission.chunks:
-            return self._get_real_chunks(submission, include_metadata)
-        else:
-            return self._synthesize_legacy_chunk(submission)
+        # Ensure submission_id is UUID type for query
+        if isinstance(submission_id, str):
+            submission_id = UUID(submission_id)
+        
+        # Query chunks directly to avoid lazy-loading issues
+        real_chunks = (
+            self.db.query(ContentChunk)
+            .filter(ContentChunk.submission_id == submission_id)
+            .order_by(ContentChunk.chunk_index)
+            .all()
+        )
+        
+        # Debug: Log what we found
+        logger.info(f"🔍 Query returned {len(real_chunks)} chunks for submission {submission_id}")
+        logger.info(f"📊 Submission status: {submission.status}")
+        
+        # Disable synthetic fallback – always require real token chunks
+        # Accept both 'preprocessed' and 'analyzing' since compliance_engine changes status before calling this
+        if not real_chunks or submission.status not in ("preprocessed", "analyzing"):
+            logger.critical(
+                f"🚫 NO TOKEN CHUNKS AVAILABLE for submission {submission_id} – "
+                f"Run POST /api/preprocessing/{submission_id} first. "
+                f"Found {len(real_chunks)} chunks, status={submission.status}"
+            )
+            raise ValueError(
+                f"Submission {submission_id} must be preprocessed with token-based chunking first"
+            )
+        
+        logger.info(f"✅ Returning {len(real_chunks)} REAL token chunks with full metadata")
+        
+        # Convert to DTOs
+        chunk_dtos = []
+        for chunk in real_chunks:
+            chunk_dtos.append(ChunkDTO(
+                id=chunk.id,
+                text=chunk.text,
+                chunk_index=chunk.chunk_index,
+                token_count=chunk.token_count,
+                metadata=chunk.chunk_metadata if include_metadata else {}
+            ))
+        
+        return chunk_dtos
     
     def _get_real_chunks(
         self, 
@@ -100,8 +140,12 @@ class ContentRetrievalService:
         # Estimate token count (rough approximation)
         token_count = len(truncated_content.split())
         
+        # Use DETERMINISTIC UUID based on submission ID
+        # This ensures that subsequent calls (e.g., from frontend) get the same ID
+        synthetic_id = uuid.uuid5(uuid.NAMESPACE_OID, str(submission.id))
+        
         synthetic_chunk = ChunkDTO(
-            id=uuid.uuid4(),  # Temporary non-persisted ID
+            id=synthetic_id,
             text=truncated_content,
             chunk_index=0,
             token_count=token_count,
@@ -156,3 +200,5 @@ class ContentRetrievalService:
         ).count()
         
         return count if count > 0 else 1  # At least 1 (synthetic) for legacy
+
+

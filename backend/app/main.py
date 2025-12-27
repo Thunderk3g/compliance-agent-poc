@@ -3,8 +3,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 from .config import settings
-from .api.routes import submissions, compliance, dashboard, admin, preprocessing
-from .services.ollama_service import ollama_service
+from .api.routes import submissions, compliance, dashboard, admin, preprocessing, onboarding, projects
+from .services.llm_service import llm_service
 
 # Configure logging
 logging.basicConfig(
@@ -20,13 +20,13 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Compliance Agent Backend")
 
-    # Check Ollama connection
-    ollama_healthy = await ollama_service.health_check()
+    # Check LLM connection
+    llm_healthy = await llm_service.health_check()
 
-    if ollama_healthy:
-        logger.info("✅ Ollama service is available")
+    if llm_healthy:
+        logger.info("✅ LLM service is available")
     else:
-        logger.warning("⚠️ Ollama service is not available - using fallback responses")
+        logger.warning("⚠️ LLM service is not available - using fallback responses")
 
     yield
 
@@ -57,17 +57,19 @@ app.include_router(compliance.router)
 app.include_router(dashboard.router)
 app.include_router(admin.router)  # Phase 2: Admin routes for rule management
 app.include_router(preprocessing.router)  # Phase 3: Chunked content processing
+app.include_router(onboarding.router)  # Adaptive Engine: User onboarding
+app.include_router(projects.router)  # Phase 1: Project System
 
 
 # Health check
 @app.get("/health")
 async def health_check():
     """Health check endpoint."""
-    ollama_status = await ollama_service.health_check()
+    llm_status = await llm_service.health_check()
 
     return {
         "status": "healthy",
-        "ollama_available": ollama_status
+        "llm_available": llm_status
     }
 
 

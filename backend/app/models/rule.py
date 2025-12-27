@@ -33,5 +33,37 @@ class Rule(Base):
         comment="Super admin who created this rule"
     )
 
+    # Adaptive Compliance Engine: Auto-generation tracking
+    is_auto_generated = Column(
+        Boolean,
+        default=False,
+        nullable=False,
+        index=True,
+        comment="True if rule was auto-generated from onboarding"
+    )
+    generated_from_industry = Column(
+        String(100),
+        nullable=True,
+        index=True,
+        comment="Industry context for auto-generated rules (e.g., 'insurance', 'healthcare')"
+    )
+    generation_source = Column(
+        Text,
+        nullable=True,
+        comment="Source URL or search query used to generate this rule"
+    )
+    confidence_score = Column(
+        Numeric(3, 2),
+        nullable=True,
+        comment="AI confidence in rule extraction (0.0-1.0)"
+    )
+
+    # Phase 1: MVP Project Architecture
+    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=True, index=True)
+    source_guideline_id = Column(UUID(as_uuid=True), ForeignKey('guidelines.id', ondelete='SET NULL'), nullable=True, index=True)
+
     # Relationships
     creator = relationship("User", back_populates="created_rules", foreign_keys=[created_by])
+    project = relationship("Project", back_populates="rules")
+    source_guideline = relationship("Guideline", back_populates="generated_rules")
+

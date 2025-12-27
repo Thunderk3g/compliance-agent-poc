@@ -7,6 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from typing import Optional
 from uuid import UUID
+from datetime import datetime
 import logging
 
 from ...database import get_db
@@ -66,12 +67,22 @@ async def preprocess_submission(
                 message="Submission already preprocessed"
             )
         
-        # Run preprocessing
+        # Run preprocessing with token-based parameters
         service = PreprocessingService(db)
+        
+        # Use chunk_tokens/overlap_tokens with proper defaults
+        chunk_tokens_value = request.chunk_tokens or request.chunk_size or 900
+        overlap_tokens_value = request.overlap_tokens or request.overlap or 200
+        
+        logger.info(
+            f"🔧 FIXED PARAMS: chunk_tokens={chunk_tokens_value}, "
+            f"overlap_tokens={overlap_tokens_value}"
+        )
+        
         chunks_created = await service.preprocess_submission(
             submission_id=submission_id,
-            chunk_size=request.chunk_size,
-            overlap=request.overlap
+            chunk_tokens=chunk_tokens_value,
+            overlap_tokens=overlap_tokens_value
         )
         
         # Refresh submission to get updated status
@@ -108,10 +119,10 @@ async def get_submission_chunks(
     """
     Retrieve all chunks for a submission.
     
-    **Use cases**:
-    - Debugging chunk boundaries
-    - Admin inspection
-    - Frontend chunk-based rendering
+    **Unified Access**:
+    - Returns real chunks if submission is preprocessed
+    - Returns synthetic chunk if submission is legacy/unpreprocessed
+    - Ensures frontend can always display "chunk" content
     """
     submission = db.query(Submission).filter_by(id=submission_id).first()
     if not submission:
@@ -120,9 +131,18 @@ async def get_submission_chunks(
             detail=f"Submission {submission_id} not found"
         )
     
-    chunks = db.query(ContentChunk).filter_by(
-        submission_id=submission_id
-    ).order_by(ContentChunk.chunk_index).all()
+    # Serve real token chunks directly from DB — no synthetic fallback
+    chunks = (
+        db.query(ContentChunk)
+        .filter(ContentChunk.submission_id == submission_id)
+        .order_by(ContentChunk.chunk_index)
+        .all()
+    )
+    
+    logger.info(f"✅ Served {len(chunks)} REAL token chunks with metadata")
+    
+    # helper to get timestamp (real or fallback)
+    base_time = submission.submitted_at or datetime.utcnow()
     
     return ChunkListResponse(
         submission_id=submission_id,
@@ -131,15 +151,15 @@ async def get_submission_chunks(
         total_chunks=len(chunks),
         chunks=[
             ContentChunkResponse(
-                id=chunk.id,
-                submission_id=chunk.submission_id,
-                chunk_index=chunk.chunk_index,
-                text=chunk.text,
-                token_count=chunk.token_count,
-                metadata=chunk.chunk_metadata,
-                created_at=chunk.created_at
+                id=c.id,
+                submission_id=submission_id,
+                chunk_index=c.chunk_index,
+                text=c.text,
+                token_count=c.token_count,
+                metadata=c.chunk_metadata,  # FULL TOKEN METADATA
+                created_at=c.created_at or base_time
             )
-            for chunk in chunks
+            for c in chunks
         ]
     )
 

@@ -73,7 +73,7 @@ const ScoreComparisonRadar: React.FC<ScoreComparisonRadarProps> = ({
           offsetY: 0,
           polygons: {
             strokeColors: '#E5E7EB',
-            strokeWidth: 1,
+            strokeWidth: '1',
             connectorColors: '#E5E7EB',
             fill: {
               colors: ['#F9FAFB', '#F3F4F6'],

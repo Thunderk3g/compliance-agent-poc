@@ -1,13 +1,13 @@
 import React, { useState, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { api } from '../lib/api';
-import { 
-  Upload as UploadIcon, 
-  FileText, 
-  FileCode, 
-  FileType, 
-  File, 
-  X, 
+import {
+  Upload as UploadIcon,
+  FileText,
+  FileCode,
+  FileType,
+  File,
+  X,
   CheckCircle2,
   Loader2,
   Sparkles
@@ -25,6 +25,8 @@ export const Upload: React.FC = () => {
   const [success, setSuccess] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const projectId = searchParams.get('projectId');
 
   const getFileIcon = (type: string) => {
     switch (type) {
@@ -118,6 +120,9 @@ export const Upload: React.FC = () => {
       formData.append('title', title);
       formData.append('content_type', contentType);
       formData.append('file', file);
+      if (projectId) {
+        formData.append('project_id', projectId);
+      }
 
       await api.uploadSubmission(formData);
       setSuccess(true);
@@ -171,7 +176,7 @@ export const Upload: React.FC = () => {
                       placeholder="e.g., Q4 Life Insurance Campaign"
                       required
                       className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-transparent transition-all"
-                      style={{ 
+                      style={{
                         '--tw-ring-color': '#005dac',
                       } as React.CSSProperties & { '--tw-ring-color': string }}
                       onFocus={(e) => {
@@ -196,7 +201,7 @@ export const Upload: React.FC = () => {
                       onChange={(e) => setContentType(e.target.value)}
                       required
                       className="w-full px-4 py-3 border-2 border-gray-200 rounded-lg focus:outline-none focus:border-transparent transition-all bg-white"
-                      style={{ 
+                      style={{
                         '--tw-ring-color': '#005dac',
                       } as React.CSSProperties & { '--tw-ring-color': string }}
                       onFocus={(e) => {
@@ -226,13 +231,12 @@ export const Upload: React.FC = () => {
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
                       onDrop={handleDrop}
-                      className={`relative border-2 border-dashed rounded-xl p-8 transition-all ${
-                        isDragging
-                          ? 'scale-105'
-                          : file
+                      className={`relative border-2 border-dashed rounded-xl p-8 transition-all ${isDragging
+                        ? 'scale-105'
+                        : file
                           ? 'border-green-500 bg-green-50'
                           : 'border-gray-300 bg-gray-50'
-                      }`}
+                        }`}
                       style={{
                         borderColor: isDragging ? '#005dac' : file ? undefined : undefined,
                         backgroundColor: isDragging ? '#e6f2ff' : file ? undefined : undefined,
@@ -347,7 +351,7 @@ export const Upload: React.FC = () => {
                     ) : (
                       <>
                         <UploadIcon className="w-5 h-5" />
-                        Upload and Check Compliance
+                        Upload Content
                       </>
                     )}
                   </button>

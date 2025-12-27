@@ -111,7 +111,7 @@ END;
 
 #### Authentication (`backend/app/api/deps.py`)
 - `get_current_user()` - Extract user from header
-- `require_super_admin()` - Role guard
+- ` ()` - Role guard
 - Header-based auth (POC)
 - Returns 401/403 for unauthorized
 

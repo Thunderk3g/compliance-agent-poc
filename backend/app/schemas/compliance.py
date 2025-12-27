@@ -10,8 +10,8 @@ class ViolationResponse(BaseModel):
     category: str
     description: str
     location: str
-    current_text: str
-    suggested_fix: str
+    current_text: Optional[str] = None
+    suggested_fix: Optional[str] = None
     is_auto_fixable: bool
 
     class Config:

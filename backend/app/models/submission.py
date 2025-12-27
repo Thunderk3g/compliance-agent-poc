@@ -21,9 +21,13 @@ class Submission(Base):
     # Values: uploaded, preprocessing, preprocessed, analyzing, analyzed, failed
     status = Column(String(50), default="uploaded")
 
+    # Phase 1: MVP Project Architecture
+    project_id = Column(UUID(as_uuid=True), ForeignKey('projects.id', ondelete='CASCADE'), nullable=True, index=True)
+
     # Relationships
     compliance_checks = relationship("ComplianceCheck", back_populates="submission", cascade="all, delete-orphan")
     submitter = relationship("User")
+    project = relationship("Project", back_populates="submissions")
     
     # NEW: Chunks relationship for granular content processing
     chunks = relationship("ContentChunk", back_populates="submission", 

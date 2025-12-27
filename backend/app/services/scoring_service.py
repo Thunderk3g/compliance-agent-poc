@@ -104,6 +104,7 @@ class ScoringService:
 
         # Import here to avoid circular dependency
         from ..models.rule import Rule
+        import uuid
 
         enriched = []
         for violation in violations:
@@ -112,14 +113,26 @@ class ScoringService:
             points_deduction = None
 
             if rule_id:
+                # 1. Validate UUID format first to avoid DataError
+                is_valid_uuid = False
                 try:
-                    rule = db.query(Rule).filter(Rule.id == rule_id).first()
-                    if rule and rule.points_deduction:
-                        # Convert to positive deduction value (DB stores negative)
-                        points_deduction = abs(float(rule.points_deduction))
-                        logger.debug(f"Using DB points for rule {rule_id}: {points_deduction}")
-                except Exception as e:
-                    logger.warning(f"Error fetching rule {rule_id}: {str(e)}")
+                    uuid.UUID(str(rule_id))
+                    is_valid_uuid = True
+                except (ValueError, TypeError):
+                    logger.warning(f"Invalid rule_id format from AI: {rule_id}")
+
+                if is_valid_uuid:
+                    try:
+                        # 2. Use nested transaction (SAVEPOINT) checks
+                        with db.begin_nested():
+                            rule = db.query(Rule).filter(Rule.id == rule_id).first()
+                            if rule and rule.points_deduction:
+                                # Convert to positive deduction value (DB stores negative)
+                                points_deduction = abs(float(rule.points_deduction))
+                                logger.debug(f"Using DB points for rule {rule_id}: {points_deduction}")
+                    except Exception as e:
+                        logger.warning(f"Error fetching rule {rule_id}: {str(e)}")
+                        # Transaction is rolled back to savepoint automatically by begin_nested context manager
 
             # Fallback to severity-based weight
             if points_deduction is None:
