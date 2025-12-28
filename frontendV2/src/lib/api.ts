@@ -1,4 +1,3 @@
-
 import axios from 'axios';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
@@ -10,80 +9,93 @@ export const apiClient = axios.create({
   },
 });
 
-export interface Submission {
-  id: string;
-  title: string;
-  content_type: string;
-  status: 'pending' | 'uploaded' | 'preprocessing' | 'preprocessed' | 'analyzing' | 'analyzed' | 'completed' | 'failed';
-  created_at: string;
-  submitted_at: string;
-  has_deep_analysis?: boolean;
-}
+// Request interceptor to inject User ID
+apiClient.interceptors.request.use((config) => {
+  let userId = localStorage.getItem('userId');
+  if (!userId || userId === 'demo-user-id') {
+    // Generate or use default valid UUID for demo
+    userId = '550e8400-e29b-41d4-a716-446655440000';
+    localStorage.setItem('userId', userId);
+  }
+  config.headers['X-User-Id'] = userId;
+  return config;
+});
 
-export interface Rule {
-  id: string;
-  category: 'irdai' | 'brand' | 'seo';
-  rule_text: string;
-  severity: 'critical' | 'high' | 'medium' | 'low';
-  keywords: string[];
-  pattern: string | null;
-  points_deduction: number;
-  is_active: boolean;
-  created_by: string | null;
-  created_at: string;
-}
-
-export interface RuleStats {
-  total_rules: number;
-  active_rules: number;
-  inactive_rules: number;
-  by_category: {
-    irdai: number;
-    brand: number;
-    seo: number;
-  };
-  by_severity: {
-    critical: number;
-    high: number;
-    medium: number;
-    low: number;
-  };
-}
-
-export interface RuleGenerationResponse {
-    success: boolean;
-    rules_created: number;
-    rules_failed: number;
-    rules: Rule[];
-    errors: string[];
-}
+// Response interceptor for error handling
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    // Handle common errors
+    if (error.response?.status === 401) {
+      // Handle unauthorized
+      console.error('Unauthorized access');
+    }
+    return Promise.reject(error);
+  }
+);
 
 export const api = {
-  // Submissions
-  uploadSubmission: (data: FormData) =>
-    apiClient.post('/api/submissions/upload', data, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+  // Onboarding
+  startOnboarding: (data: {
+    user_id: string;
+    industry: string;
+    brand_name: string;
+    brand_guidelines?: string;
+    analysis_scope: string[];
+    region?: string;
+  }) => apiClient.post('/api/onboarding/start', data),
+
+  getUserConfig: (userId: string) =>
+    apiClient.get(`/api/onboarding/${userId}/config`),
+
+  updateUserConfig: (
+    userId: string,
+    updates: { industry?: string; brand_name?: string; analysis_scope?: string[] }
+  ) => {
+    const params = new URLSearchParams();
+    if (updates.industry) params.append('industry', updates.industry);
+    if (updates.brand_name) params.append('brand_name', updates.brand_name);
+    if (updates.analysis_scope) {
+      updates.analysis_scope.forEach((scope) => params.append('analysis_scope', scope));
+    }
+    return apiClient.put(`/api/onboarding/${userId}/config?${params}`);
+  },
+
+  // Projects
+  createProject: (data: { name: string; description: string }) =>
+    apiClient.post('/api/projects/', data),
+
+  getProjects: () => apiClient.get('/api/projects/'),
+
+  getProject: (projectId: string) =>
+    apiClient.get(`/api/projects/${projectId}`),
+
+  uploadGuideline: (projectId: string, file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return apiClient.post(`/api/projects/${projectId}/guidelines`, formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+
+  deleteGuideline: (projectId: string, guidelineId: string) =>
+    apiClient.delete(`/api/projects/${projectId}/guidelines/${guidelineId}`),
+
+  improveRules: (projectId: string, guidelineId: string, instructions: string) =>
+    apiClient.post(`/api/projects/${projectId}/guidelines/${guidelineId}/improve-rules`, {
+      instructions,
     }),
 
-  getSubmissions: () => apiClient.get<Submission[]>('/api/submissions'),
+  refineProjectRule: (projectId: string, ruleId: string, instructions: string) =>
+    apiClient.post(`/api/projects/${projectId}/rules/${ruleId}/refine`, { instructions }),
 
-  getSubmission: (id: string) =>
-    apiClient.get<Submission>(`/api/submissions/${id}`),
+  deleteProjectRule: (projectId: string, ruleId: string) =>
+    apiClient.delete(`/api/projects/${projectId}/rules/${ruleId}`),
 
-  analyzeSubmission: (id: string) =>
-    apiClient.post(`/api/submissions/${id}/analyze`),
+  getProjectGuidelines: (projectId: string) =>
+    apiClient.get(`/api/projects/${projectId}/guidelines`),
 
-  deleteSubmission: (id: string) =>
-    apiClient.delete(`/api/submissions/${id}`),
-
-  deleteAllSubmissions: () =>
-    apiClient.delete('/api/submissions'),
-
-  // Dashboard & Misc (Placeholders for future use)
-  getDashboardStats: () => apiClient.get('/api/dashboard/stats'),
-  getRecentSubmissions: () => apiClient.get('/api/dashboard/recent'),
-
-  // Admin - Rule Management
+  // Rules
   getRules: (params: {
     page?: number;
     page_size?: number;
@@ -91,44 +103,44 @@ export const api = {
     severity?: string;
     is_active?: boolean;
     search?: string;
-    userId?: string;
+    userId: string;
   }) => {
-    return apiClient.get<{ rules: Rule[]; total: number; total_pages: number }>('/api/admin/rules', {
-      params,
-      headers: params.userId ? { 'X-User-Id': params.userId } : undefined,
+    const { userId, ...queryParams } = params;
+    return apiClient.get('/api/admin/rules', {
+      params: queryParams,
+      headers: { 'X-User-Id': userId },
     });
   },
 
-  getRuleStats: (userId?: string) =>
-    apiClient.get<RuleStats>('/api/admin/rules/stats/summary', {
-      headers: userId ? { 'X-User-Id': userId } : undefined,
+  // Submissions
+  uploadSubmission: (data: FormData) =>
+    apiClient.post('/api/submissions/upload', data, {
+      headers: { 'Content-Type': 'multipart/form-data' },
     }),
 
-  updateRule: (ruleId: string, data: Partial<Rule>, userId?: string) =>
-    apiClient.put(`/api/admin/rules/${ruleId}`, data, {
-      headers: userId ? { 'X-User-Id': userId } : undefined,
-    }),
+  getSubmissions: (projectId?: string) =>
+    apiClient.get('/api/submissions', { params: { project_id: projectId } }),
 
-  deleteRule: (ruleId: string, userId?: string) =>
-    apiClient.delete(`/api/admin/rules/${ruleId}`, {
-      headers: userId ? { 'X-User-Id': userId } : undefined,
-    }),
+  getSubmission: (id: string) => apiClient.get(`/api/submissions/${id}`),
 
-  previewRulesFromDocument: (file: File, documentTitle: string, userId?: string) => {
-    const formData = new FormData();
-    formData.append('file', file);
-    formData.append('document_title', documentTitle);
+  analyzeSubmission: (id: string) =>
+    apiClient.post(`/api/submissions/${id}/analyze`),
 
-    return apiClient.post('/api/admin/rules/preview', formData, {
-      headers: {
-        'Content-Type': 'multipart/form-data',
-        'X-User-Id': userId,
-      },
-    });
-  },
-  
-  bulkSubmitRules: (data: any, userId?: string) =>
-    apiClient.post('/api/admin/rules/bulk-submit', data, {
-        headers: userId ? { 'X-User-Id': userId } : undefined,
-    }),
+  deleteSubmission: (id: string) => apiClient.delete(`/api/submissions/${id}`),
+
+  // Dashboard
+  getDashboardStats: () => apiClient.get('/api/dashboard/stats'),
+
+  getDashboardTrends: (days: number = 30) =>
+    apiClient.get('/api/dashboard/trends', { params: { days } }),
+
+  getViolationsHeatmap: () => apiClient.get('/api/dashboard/violations-heatmap'),
+
+  getTopViolations: (limit: number = 5) =>
+    apiClient.get('/api/dashboard/top-violations', { params: { limit } }),
+
+  getRecentSubmissions: () => apiClient.get('/api/dashboard/recent'),
+
+  triggerPreprocessing: (id: string) =>
+    apiClient.post(`/api/submissions/${id}/preprocess`),
 };
