@@ -1,7 +1,6 @@
 import { useProject } from '@/contexts/ProjectContext';
 import { useUser } from '@/contexts/UserContext';
-import { api } from '@/lib/api';
-import { useQuery } from '@tanstack/react-query';
+import { useProjects } from '@/services/projects';
 import { ChevronDown, ChevronRight, Search } from 'lucide-react';
 import { useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -16,12 +15,7 @@ export function Navbar() {
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
 
   // Fetch all projects for the dropdown
-  const { data: projectsResponse } = useQuery({
-    queryKey: ['projects'],
-    queryFn: api.getProjects,
-  });
-
-  const projects = projectsResponse?.data || [];
+  const { data: projects = [] } = useProjects();
   
   // Check if we're inside a project (has project ID in URL)
   const isInProject = !!projectId;

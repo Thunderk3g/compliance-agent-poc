@@ -5,8 +5,13 @@ import { KPICard } from '@/components/dashboard/KPICard';
 import { StatusDonut } from '@/components/dashboard/StatusDonut';
 import { TopViolationsChart } from '@/components/dashboard/TopViolationsChart';
 import { ViolationsHeatmap } from '@/components/dashboard/ViolationsHeatmap';
-import { api } from '@/lib/api';
-import { useQuery } from '@tanstack/react-query';
+import {
+    useDashboardStats,
+    useDashboardTrends,
+    useRecentSubmissions,
+    useTopViolations,
+    useViolationsHeatmap,
+} from '@/services/dashboard';
 import { motion } from 'framer-motion';
 import { AlertTriangle, FileText, Shield, TrendingUp } from 'lucide-react';
 import { useParams } from 'react-router-dom';
@@ -14,46 +19,12 @@ import { useParams } from 'react-router-dom';
 export default function ProjectDashboard() {
   const { id } = useParams<{ id: string }>();
 
-  // Fetch project-specific dashboard data
-  const { data: statsResponse, isLoading: statsLoading } = useQuery({
-    queryKey: ['dashboard-stats', id],
-    queryFn: async () => {
-      const response = await api.getDashboardStats();
-      return response.data;
-    },
-  });
-
-  const { data: trendsResponse, isLoading: trendsLoading } = useQuery({
-    queryKey: ['dashboard-trends', id],
-    queryFn: async () => {
-      const response = await api.getDashboardTrends(30);
-      return response.data;
-    },
-  });
-
-  const { data: heatmapResponse, isLoading: heatmapLoading } = useQuery({
-    queryKey: ['violations-heatmap', id],
-    queryFn: async () => {
-      const response = await api.getViolationsHeatmap();
-      return response.data;
-    },
-  });
-
-  const { data: topViolationsResponse, isLoading: topViolationsLoading } = useQuery({
-    queryKey: ['top-violations', id],
-    queryFn: async () => {
-      const response = await api.getTopViolations(5);
-      return response.data;
-    },
-  });
-
-  const { data: recentSubmissionsResponse, isLoading: submissionsLoading } = useQuery({
-    queryKey: ['recent-submissions', id],
-    queryFn: async () => {
-      const response = await api.getRecentSubmissions();
-      return response.data;
-    },
-  });
+  // Fetch project-specific dashboard data using custom hooks
+  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: trends, isLoading: trendsLoading } = useDashboardTrends(30);
+  const { data: heatmap, isLoading: heatmapLoading } = useViolationsHeatmap();
+  const { data: topViolations, isLoading: topViolationsLoading } = useTopViolations(5);
+  const { data: recentSubmissions, isLoading: submissionsLoading } = useRecentSubmissions();
 
   const isLoading =
     statsLoading || trendsLoading || heatmapLoading || topViolationsLoading || submissionsLoading;
@@ -66,12 +37,9 @@ export default function ProjectDashboard() {
     );
   }
 
-  // Extract data from responses
-  const stats = statsResponse;
-  const trends = trendsResponse;
-  const heatmap = heatmapResponse;
-  const topViolations = topViolationsResponse || [];
-  const recentSubmissions = recentSubmissionsResponse || [];
+  // Data is already extracted by custom hooks
+  const topViolationsData = topViolations || [];
+  const recentSubmissionsData = recentSubmissions || [];
 
   return (
     <div className="p-6 space-y-6">
@@ -143,7 +111,7 @@ export default function ProjectDashboard() {
             <h3 className="text-lg font-semibold text-card-foreground mb-4">
               Top Violations
             </h3>
-            <TopViolationsChart violations={topViolations || []} />
+            <TopViolationsChart violations={topViolationsData} />
           </motion.div>
 
           <motion.div
@@ -202,7 +170,7 @@ export default function ProjectDashboard() {
             <h3 className="text-lg font-semibold text-card-foreground mb-4">
               Recent Activity
             </h3>
-            <ActivityTimeline submissions={recentSubmissions || []} />
+            <ActivityTimeline submissions={recentSubmissionsData} />
           </motion.div>
         </div>
       </div>

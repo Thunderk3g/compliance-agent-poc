@@ -6,38 +6,23 @@ import { StatusDonut } from '@/components/dashboard/StatusDonut';
 import { TopViolationsChart } from '@/components/dashboard/TopViolationsChart';
 import { ViolationsHeatmap } from '@/components/dashboard/ViolationsHeatmap';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/Card';
-import { api } from '@/lib/api';
-import type { ComplianceTrend, DashboardStats, ViolationsHeatmap as HeatmapType, RecentSubmission, TopViolation } from '@/types/dashboard';
-import { useQuery } from '@tanstack/react-query';
+import {
+  useDashboardStats,
+  useDashboardTrends,
+  useRecentSubmissions,
+  useTopViolations,
+  useViolationsHeatmap,
+} from '@/services/dashboard';
 import { motion } from 'framer-motion';
 import { Activity, AlertCircle, Clock, TrendingUp, Users } from 'lucide-react';
 
 export default function Dashboard() {
-  // Fetch all dashboard data
-  const { data: stats, isLoading: statsLoading } = useQuery<{ data: DashboardStats }>({
-    queryKey: ['dashboardStats'],
-    queryFn: () => api.getDashboardStats(),
-  });
-
-  const { data: trends, isLoading: trendsLoading } = useQuery<{ data: ComplianceTrend }>({
-    queryKey: ['dashboardTrends'],
-    queryFn: () => api.getDashboardTrends(30),
-  });
-
-  const { data: heatmap, isLoading: heatmapLoading } = useQuery<{ data: HeatmapType }>({
-    queryKey: ['violationsHeatmap'],
-    queryFn: () => api.getViolationsHeatmap(),
-  });
-
-  const { data: topViolations, isLoading: violationsLoading } = useQuery<{ data: TopViolation[] }>({
-    queryKey: ['topViolations'],
-    queryFn: () => api.getTopViolations(5),
-  });
-
-  const { data: recentSubmissions, isLoading: recentLoading } = useQuery<{ data: RecentSubmission[] }>({
-    queryKey: ['recentSubmissions'],
-    queryFn: () => api.getRecentSubmissions(),
-  });
+  // Fetch all dashboard data using custom hooks
+  const { data: stats, isLoading: statsLoading } = useDashboardStats();
+  const { data: trends, isLoading: trendsLoading } = useDashboardTrends(30);
+  const { data: heatmap, isLoading: heatmapLoading } = useViolationsHeatmap();
+  const { data: topViolations, isLoading: violationsLoading } = useTopViolations(5);
+  const { data: recentSubmissions, isLoading: recentLoading } = useRecentSubmissions();
 
   const isLoading = statsLoading || trendsLoading || heatmapLoading || violationsLoading || recentLoading;
 
@@ -52,11 +37,12 @@ export default function Dashboard() {
     );
   }
 
-  const dashboardStats = stats?.data;
-  const trendData = trends?.data;
-  const heatmapData = heatmap?.data;
-  const violations = topViolations?.data || [];
-  const recent = recentSubmissions?.data || [];
+  // Data is already extracted by custom hooks
+  const dashboardStats = stats;
+  const trendData = trends;
+  const heatmapData = heatmap;
+  const violations = topViolations || [];
+  const recent = recentSubmissions || [];
 
   // Mock data fallbacks for when API returns empty data
   const mockTrendData = {

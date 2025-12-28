@@ -1,7 +1,6 @@
 import { Button } from '@/components/ui/Button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/Card';
-import { api } from '@/lib/api';
-import { useQuery } from '@tanstack/react-query';
+import { useProjects } from '@/services/projects';
 import { motion } from 'framer-motion';
 import { Calendar, Folder, Plus, Search } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -14,13 +13,8 @@ interface Project {
 }
 
 export default function ProjectsPage() {
-  const { data: projectsData, isLoading, error } = useQuery({
-    queryKey: ['projects'],
-    queryFn: api.getProjects,
-  });
+  const { data: projects = [], isLoading, error } = useProjects();
 
-
-  const projects = projectsData?.data ?? [];
 
   return (
     <div className="flex min-h-[calc(100vh-108px)]">
