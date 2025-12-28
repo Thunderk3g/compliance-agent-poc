@@ -1,10 +1,10 @@
-import React, { useEffect, useState } from 'react';
-import { Plus, Folder, Calendar, ArrowRight } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { ArrowRight, Calendar, Folder, Plus } from 'lucide-react';
+import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
+import { CreateProjectDialog } from '../components/projects/CreateProjectDialog';
 import { api } from '../lib/api';
 import { Project } from '../lib/types';
-import { CreateProjectDialog } from '../components/projects/CreateProjectDialog';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 
 export default function ProjectList() {
     const [projects, setProjects] = useState<Project[]>([]);
@@ -71,7 +71,7 @@ export default function ProjectList() {
                     </button>
 
                     {/* Project Cards */}
-                    {projects.map((project) => (
+                    {projects?.map((project) => (
                         <Link
                             key={project.id}
                             to={`/projects/${project.id}`}

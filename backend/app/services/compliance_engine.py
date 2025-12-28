@@ -88,8 +88,11 @@ class ComplianceEngine:
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error analyzing submission: {str(e)}")
+            db.rollback()  # Rollback invalid transaction
             if submission:
+                # Re-fetch submission in new transaction if needed, but session usually persists
                 submission.status = "failed"
+                db.add(submission)
                 db.commit()
             raise
 
