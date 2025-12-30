@@ -14,22 +14,22 @@ interface KPICardProps {
 
 const colorClasses = {
   indigo: {
-    bg: 'from-indigo-50 to-indigo-100 dark:from-indigo-950/30 dark:to-indigo-900/30',
+    bg: 'bg-indigo-50 dark:bg-indigo-950/20',
     icon: 'text-indigo-600 dark:text-indigo-400',
     trend: 'text-indigo-700 dark:text-indigo-300',
   },
   emerald: {
-    bg: 'from-emerald-50 to-emerald-100 dark:from-emerald-950/30 dark:to-emerald-900/30',
+    bg: 'bg-emerald-50 dark:bg-emerald-950/20',
     icon: 'text-emerald-600 dark:text-emerald-400',
     trend: 'text-emerald-700 dark:text-emerald-300',
   },
   amber: {
-    bg: 'from-amber-50 to-amber-100 dark:from-amber-950/30 dark:to-amber-900/30',
+    bg: 'bg-amber-50 dark:bg-amber-950/20',
     icon: 'text-amber-600 dark:text-amber-400',
     trend: 'text-amber-700 dark:text-amber-300',
   },
   red: {
-    bg: 'from-red-50 to-red-100 dark:from-red-950/30 dark:to-red-900/30',
+    bg: 'bg-red-50 dark:bg-red-950/20',
     icon: 'text-red-600 dark:text-red-400',
     trend: 'text-red-700 dark:text-red-300',
   },
@@ -67,7 +67,6 @@ export function KPICard({ title, value, trend, icon: Icon, color, format = 'numb
       transition={{ duration: 0.4 }}
       className={cn(
         'relative overflow-hidden rounded-2xl p-6',
-        'bg-gradient-to-br',
         colorClasses[color].bg,
         'shadow-[8px_8px_16px_rgba(163,177,198,0.3),-8px_-8px_16px_rgba(255,255,255,0.5)]',
         'dark:shadow-[8px_8px_16px_rgba(0,0,0,0.3),-8px_-8px_16px_rgba(255,255,255,0.03)]',

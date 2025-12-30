@@ -50,7 +50,7 @@ export function Navbar() {
       <div className="flex items-center gap-4">
         {/* Logo */}
         <Link to="/" className="flex items-center gap-2">
-          <div className="w-8 h-8 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-lg flex items-center justify-center">
+          <div className="w-8 h-8 bg-indigo-500 rounded-lg flex items-center justify-center">
             <span className="text-white font-bold text-sm">AC</span>
           </div>
         </Link>
@@ -179,7 +179,7 @@ export function Navbar() {
         {/* Profile Avatar */}
         <Dropdown
           trigger={
-            <button className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white text-sm font-medium hover:opacity-80 transition-opacity">
+            <button className="w-8 h-8 rounded-full bg-indigo-500 flex items-center justify-center text-white text-sm font-medium hover:opacity-80 transition-opacity">
               {user?.email?.[0]?.toUpperCase() || 'U'}
             </button>
           }

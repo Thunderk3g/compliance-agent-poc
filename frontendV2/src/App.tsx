@@ -8,8 +8,10 @@ import Dashboard from './pages/Dashboard';
 import Landing from './pages/Landing';
 import Login from './pages/Login';
 import OnboardingPage from './pages/Onboarding';
-import ProjectDashboard from './pages/ProjectDashboard';
 import ProjectsPage from './pages/Projects';
+import ResultDetail from './pages/ResultDetail';
+import ResultsPage from './pages/Results';
+import SubmissionPage from './pages/Submission';
 
 function App() {
   return (
@@ -29,17 +31,16 @@ function App() {
                 <Route path="/onboarding" element={<OnboardingPage />} />
                 
                 {/* Project-Specific Routes */}
-                <Route path="/projects/:id/dashboard" element={<ProjectDashboard />} />
+                <Route path="/projects/:id/dashboard" element={<Dashboard />} />
+                <Route path="/projects/:id/analyze" element={<SubmissionPage />} />
+                <Route path="/projects/:id/results" element={<ResultsPage />} />
+                <Route path="/projects/:id/results/:resultId" element={<ResultDetail />} />
                 <Route path="/projects/:id/rules" element={<div className="p-6 text-white">Rules & Guidelines (Coming Soon)</div>} />
-                <Route path="/projects/:id/analyze" element={<div className="p-6 text-white">Content Analysis (Coming Soon)</div>} />
-                <Route path="/projects/:id/results" element={<div className="p-6 text-white">Analysis Results (Coming Soon)</div>} />
                 <Route path="/projects/:id/settings" element={<div className="p-6 text-white">Project Settings (Coming Soon)</div>} />
                 
                 {/* Global Routes */}
-                <Route path="/dashboard" element={<Dashboard />} />
-                <Route path="/analysis" element={<div className="p-6 text-white">Global Analysis (Coming Soon)</div>} />
-                <Route path="/submissions" element={<div className="p-6 text-white">All Submissions (Coming Soon)</div>} />
-                <Route path="/agent" element={<div className="p-6 text-white">Agent (Coming Soon)</div>} />
+                <Route path="/results" element={<ResultsPage />} />
+                <Route path="/results/:resultId" element={<ResultDetail />} />
                 <Route path="/settings" element={<div className="p-6 text-white">Settings (Coming Soon)</div>} />
               </Route>
             </Routes>

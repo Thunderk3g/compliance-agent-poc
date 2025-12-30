@@ -3,16 +3,16 @@ import { Input } from '@/components/ui/Input';
 import { api } from '@/lib/api';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
-  ArrowLeft,
-  ArrowRight,
-  Building2,
-  CheckCircle,
-  FileText,
-  FolderPlus,
-  Sparkles,
-  Target,
-  Trash2,
-  Upload
+    ArrowLeft,
+    ArrowRight,
+    Building2,
+    CheckCircle,
+    FileText,
+    FolderPlus,
+    Sparkles,
+    Target,
+    Trash2,
+    Upload
 } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -538,12 +538,12 @@ export default function OnboardingPage() {
                 ) : (
                   <div className="space-y-3 max-h-96 overflow-y-auto">
                     {generatedRules.map((rule) => {
-                      // Category colors (matching dashboard style)
+                      // Category colors (clean solid backgrounds)
                       const categoryColors = {
-                        irdai: 'from-purple-500/10 to-indigo-500/10 border-purple-500/20',
-                        brand: 'from-emerald-500/10 to-teal-500/10 border-emerald-500/20',
-                        seo: 'from-blue-500/10 to-cyan-500/10 border-blue-500/20',
-                        qualitative: 'from-amber-500/10 to-orange-500/10 border-amber-500/20',
+                        irdai: 'bg-purple-500/5 border-purple-500/20',
+                        brand: 'bg-emerald-500/5 border-emerald-500/20',
+                        seo: 'bg-blue-500/5 border-blue-500/20',
+                        qualitative: 'bg-amber-500/5 border-amber-500/20',
                       };
 
                       const categoryBadgeColors = {
@@ -569,7 +569,7 @@ export default function OnboardingPage() {
                           key={rule.id}
                           initial={{ opacity: 0, y: 10 }}
                           animate={{ opacity: 1, y: 0 }}
-                          className={`p-4 rounded-lg bg-gradient-to-br ${categoryColors[categoryKey] || categoryColors.qualitative} border hover:shadow-lg transition-all`}
+                          className={`p-4 rounded-lg ${categoryColors[categoryKey] || categoryColors.qualitative} border hover:shadow-lg transition-all`}
                         >
                           <p className="text-foreground font-medium mb-3">
                             {rule.rule_text}

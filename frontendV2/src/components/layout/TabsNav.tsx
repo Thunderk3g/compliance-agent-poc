@@ -11,19 +11,16 @@ export function TabsNav() {
   // Project-specific tabs
   const projectTabs = [
     { name: 'Overview', path: `/projects/${id}/dashboard` },
-    { name: 'Rules', path: `/projects/${id}/rules` },
     { name: 'Analyze', path: `/projects/${id}/analyze` },
     { name: 'Results', path: `/projects/${id}/results` },
+    { name: 'Rules', path: `/projects/${id}/rules` },
     { name: 'Settings', path: `/projects/${id}/settings` },
   ];
 
-  // Global tabs
+  // Global tabs (outside project context)
   const globalTabs = [
     { name: 'Projects', path: '/projects' },
-    { name: 'Dashboard', path: '/dashboard' },
-    { name: 'Analysis', path: '/analysis' },
-    { name: 'Submissions', path: '/submissions' },
-    { name: 'Agent', path: '/agent' },
+    { name: 'Results', path: '/results' },
     { name: 'Settings', path: '/settings' },
   ];
 

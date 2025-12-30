@@ -129,17 +129,20 @@ export const api = {
   deleteSubmission: (id: string) => apiClient.delete(`/api/submissions/${id}`),
 
   // Dashboard
-  getDashboardStats: () => apiClient.get('/api/dashboard/stats'),
+  getDashboardStats: (projectId?: string) =>
+    apiClient.get('/api/dashboard/stats', { params: { project_id: projectId } }),
 
-  getDashboardTrends: (days: number = 30) =>
-    apiClient.get('/api/dashboard/trends', { params: { days } }),
+  getDashboardTrends: (days: number = 30, projectId?: string) =>
+    apiClient.get('/api/dashboard/trends', { params: { days, project_id: projectId } }),
 
-  getViolationsHeatmap: () => apiClient.get('/api/dashboard/violations-heatmap'),
+  getViolationsHeatmap: (projectId?: string) =>
+    apiClient.get('/api/dashboard/violations-heatmap', { params: { project_id: projectId } }),
 
-  getTopViolations: (limit: number = 5) =>
-    apiClient.get('/api/dashboard/top-violations', { params: { limit } }),
+  getTopViolations: (limit: number = 5, projectId?: string) =>
+    apiClient.get('/api/dashboard/top-violations', { params: { limit, project_id: projectId } }),
 
-  getRecentSubmissions: () => apiClient.get('/api/dashboard/recent'),
+  getRecentSubmissions: (projectId?: string) =>
+    apiClient.get('/api/dashboard/recent', { params: { project_id: projectId } }),
 
   triggerPreprocessing: (id: string) =>
     apiClient.post(`/api/submissions/${id}/preprocess`),

@@ -6,11 +6,11 @@ import { StatusDonut } from '@/components/dashboard/StatusDonut';
 import { TopViolationsChart } from '@/components/dashboard/TopViolationsChart';
 import { ViolationsHeatmap } from '@/components/dashboard/ViolationsHeatmap';
 import {
-    useDashboardStats,
-    useDashboardTrends,
-    useRecentSubmissions,
-    useTopViolations,
-    useViolationsHeatmap,
+  useDashboardStats,
+  useDashboardTrends,
+  useRecentSubmissions,
+  useTopViolations,
+  useViolationsHeatmap,
 } from '@/services/dashboard';
 import { motion } from 'framer-motion';
 import { AlertTriangle, FileText, Shield, TrendingUp } from 'lucide-react';
@@ -20,11 +20,11 @@ export default function ProjectDashboard() {
   const { id } = useParams<{ id: string }>();
 
   // Fetch project-specific dashboard data using custom hooks
-  const { data: stats, isLoading: statsLoading } = useDashboardStats();
-  const { data: trends, isLoading: trendsLoading } = useDashboardTrends(30);
-  const { data: heatmap, isLoading: heatmapLoading } = useViolationsHeatmap();
-  const { data: topViolations, isLoading: topViolationsLoading } = useTopViolations(5);
-  const { data: recentSubmissions, isLoading: submissionsLoading } = useRecentSubmissions();
+  const { data: stats, isLoading: statsLoading } = useDashboardStats(id);
+  const { data: trends, isLoading: trendsLoading } = useDashboardTrends(30, id);
+  const { data: heatmap, isLoading: heatmapLoading } = useViolationsHeatmap(id);
+  const { data: topViolations, isLoading: topViolationsLoading } = useTopViolations(5, id);
+  const { data: recentSubmissions, isLoading: submissionsLoading } = useRecentSubmissions(id);
 
   const isLoading =
     statsLoading || trendsLoading || heatmapLoading || topViolationsLoading || submissionsLoading;
@@ -32,7 +32,48 @@ export default function ProjectDashboard() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center min-h-[calc(100vh-108px)]">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-500"></div>
+      </div>
+    );
+  }
+
+  // Check if there's no data
+  const hasData = stats && (stats.total_submissions > 0 || (topViolations && topViolations.length > 0) || (recentSubmissions && recentSubmissions.length > 0));
+
+  // Empty state
+  if (!hasData) {
+    return (
+      <div className="p-6">
+        <motion.div
+          initial={{ opacity: 0, y: -20 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="mb-8"
+        >
+          <h1 className="text-3xl font-bold text-foreground">Project Overview</h1>
+          <p className="text-muted-foreground">Monitor compliance and track submissions</p>
+        </motion.div>
+
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+          className="flex flex-col items-center justify-center py-20"
+        >
+          <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mb-6">
+            <FileText className="w-10 h-10 text-indigo-500" />
+          </div>
+          <h3 className="text-2xl font-bold text-foreground mb-2">No Data Yet</h3>
+          <p className="text-muted-foreground text-center max-w-md mb-6">
+            Start analyzing your content by uploading documents in the Analyze tab
+          </p>
+          <a
+            href={`/projects/${id}/analyze`}
+            className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+          >
+            <FileText className="w-5 h-5" />
+            Upload Content
+          </a>
+        </motion.div>
       </div>
     );
   }
@@ -43,6 +84,15 @@ export default function ProjectDashboard() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Header */}
+      <motion.div
+        initial={{ opacity: 0, y: -20 }}
+        animate={{ opacity: 1, y: 0 }}
+      >
+        <h1 className="text-3xl font-bold text-foreground">Project Overview</h1>
+        <p className="text-muted-foreground">Monitor compliance and track submissions</p>
+      </motion.div>
+
       {/* Hero KPI Cards */}
       <motion.div
         initial={{ opacity: 0, y: 20 }}

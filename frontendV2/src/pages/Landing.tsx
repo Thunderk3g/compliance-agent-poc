@@ -32,7 +32,7 @@ export default function Landing() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
           >
-            <h1 className="text-6xl font-bold mb-6 bg-gradient-to-r from-blue-500 to-purple-600 bg-clip-text text-transparent">
+            <h1 className="text-6xl font-bold mb-6 text-white">
               Adaptive Compliance Engine
             </h1>
             <p className="text-xl text-zinc-400 mb-8 max-w-3xl mx-auto">
@@ -129,7 +129,7 @@ export default function Landing() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
-            className="bg-gradient-to-r from-blue-500/10 to-purple-600/10 border border-blue-500/20 rounded-2xl p-12"
+            className="bg-blue-500/5 border border-blue-500/20 rounded-2xl p-12"
           >
             <h2 className="text-4xl font-bold mb-4">Ready to get started?</h2>
             <p className="text-lg text-zinc-400 mb-8">

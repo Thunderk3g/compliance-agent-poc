@@ -14,15 +14,19 @@ import {
   useViolationsHeatmap,
 } from '@/services/dashboard';
 import { motion } from 'framer-motion';
-import { Activity, AlertCircle, Clock, TrendingUp, Users } from 'lucide-react';
+import { Activity, AlertCircle, Clock, FileText, TrendingUp, Users } from 'lucide-react';
+import { useParams } from 'react-router-dom';
 
 export default function Dashboard() {
-  // Fetch all dashboard data using custom hooks
-  const { data: stats, isLoading: statsLoading } = useDashboardStats();
-  const { data: trends, isLoading: trendsLoading } = useDashboardTrends(30);
-  const { data: heatmap, isLoading: heatmapLoading } = useViolationsHeatmap();
-  const { data: topViolations, isLoading: violationsLoading } = useTopViolations(5);
-  const { data: recentSubmissions, isLoading: recentLoading } = useRecentSubmissions();
+  // Get project ID from URL params if in project context
+  const { id: projectId } = useParams<{ id?: string }>();
+
+  // Fetch dashboard data using custom hooks (with optional projectId)
+  const { data: stats, isLoading: statsLoading } = useDashboardStats(projectId);
+  const { data: trends, isLoading: trendsLoading } = useDashboardTrends(30, projectId);
+  const { data: heatmap, isLoading: heatmapLoading } = useViolationsHeatmap(projectId);
+  const { data: topViolations, isLoading: violationsLoading } = useTopViolations(5, projectId);
+  const { data: recentSubmissions, isLoading: recentLoading } = useRecentSubmissions(projectId);
 
   const isLoading = statsLoading || trendsLoading || heatmapLoading || violationsLoading || recentLoading;
 
@@ -32,6 +36,60 @@ export default function Dashboard() {
         <div className="flex flex-col items-center gap-4">
           <div className="animate-spin rounded-full h-12 w-12 border-4 border-indigo-500 border-t-transparent" />
           <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Check if there's no data
+  const hasData = stats && (stats.total_submissions > 0 || (topViolations && topViolations.length > 0) || (recentSubmissions && recentSubmissions.length > 0));
+
+  // Empty state
+  if (!hasData) {
+    return (
+      <div className="min-h-screen bg-background p-6">
+        <div className="max-w-[1400px] mx-auto">
+          <motion.div
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8"
+          >
+            <div className="flex items-center gap-3 mb-2">
+              <Activity className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
+              <h1 className="text-4xl font-bold text-foreground">
+                {projectId ? 'Project Overview' : 'Compliance Dashboard'}
+              </h1>
+            </div>
+            <p className="text-muted-foreground">
+              Real-time analytics and compliance monitoring
+            </p>
+          </motion.div>
+
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 }}
+            className="flex flex-col items-center justify-center py-20"
+          >
+            <div className="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mb-6">
+              <FileText className="w-10 h-10 text-indigo-500" />
+            </div>
+            <h3 className="text-2xl font-bold text-foreground mb-2">No Data Yet</h3>
+            <p className="text-muted-foreground text-center max-w-md mb-6">
+              {projectId 
+                ? 'Start analyzing your content by uploading documents in the Analyze tab'
+                : 'Create a project and upload content to see analytics'}
+            </p>
+            {projectId && (
+              <a
+                href={`/projects/${projectId}/analyze`}
+                className="inline-flex items-center gap-2 px-6 py-3 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+              >
+                <FileText className="w-5 h-5" />
+                Upload Content
+              </a>
+            )}
+          </motion.div>
         </div>
       </div>
     );
@@ -97,7 +155,7 @@ export default function Dashboard() {
           <div className="flex items-center gap-3 mb-2">
             <Activity className="w-8 h-8 text-indigo-600 dark:text-indigo-400" />
             <h1 className="text-4xl font-bold text-foreground">
-              Compliance Dashboard
+              {projectId ? 'Project Overview' : 'Compliance Dashboard'}
             </h1>
           </div>
           <p className="text-muted-foreground">

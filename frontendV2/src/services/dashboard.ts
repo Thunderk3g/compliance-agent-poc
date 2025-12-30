@@ -1,69 +1,69 @@
 import { api } from '@/lib/api';
 import type {
-  ComplianceTrend,
-  DashboardStats,
-  RecentSubmission,
-  TopViolation,
-  ViolationsHeatmap,
+    ComplianceTrend,
+    DashboardStats,
+    RecentSubmission,
+    TopViolation,
+    ViolationsHeatmap,
 } from '@/types/dashboard';
 import { useQuery } from '@tanstack/react-query';
 
 // Query Keys
 export const dashboardKeys = {
   all: ['dashboard'] as const,
-  stats: () => [...dashboardKeys.all, 'stats'] as const,
-  trends: (days: number) => [...dashboardKeys.all, 'trends', days] as const,
-  heatmap: () => [...dashboardKeys.all, 'heatmap'] as const,
-  topViolations: (limit: number) => [...dashboardKeys.all, 'violations', limit] as const,
-  recentSubmissions: () => [...dashboardKeys.all, 'recent'] as const,
+  stats: (projectId?: string) => [...dashboardKeys.all, 'stats', projectId] as const,
+  trends: (days: number, projectId?: string) => [...dashboardKeys.all, 'trends', days, projectId] as const,
+  heatmap: (projectId?: string) => [...dashboardKeys.all, 'heatmap', projectId] as const,
+  topViolations: (limit: number, projectId?: string) => [...dashboardKeys.all, 'violations', limit, projectId] as const,
+  recentSubmissions: (projectId?: string) => [...dashboardKeys.all, 'recent', projectId] as const,
 };
 
 // Custom Hooks
-export function useDashboardStats() {
+export function useDashboardStats(projectId?: string) {
   return useQuery<DashboardStats>({
-    queryKey: dashboardKeys.stats(),
+    queryKey: dashboardKeys.stats(projectId),
     queryFn: async () => {
-      const response = await api.getDashboardStats();
+      const response = await api.getDashboardStats(projectId);
       return response.data as DashboardStats;
     },
   });
 }
 
-export function useDashboardTrends(days: number = 30) {
+export function useDashboardTrends(days: number = 30, projectId?: string) {
   return useQuery<ComplianceTrend>({
-    queryKey: dashboardKeys.trends(days),
+    queryKey: dashboardKeys.trends(days, projectId),
     queryFn: async () => {
-      const response = await api.getDashboardTrends(days);
+      const response = await api.getDashboardTrends(days, projectId);
       return response.data as ComplianceTrend;
     },
   });
 }
 
-export function useViolationsHeatmap() {
+export function useViolationsHeatmap(projectId?: string) {
   return useQuery<ViolationsHeatmap>({
-    queryKey: dashboardKeys.heatmap(),
+    queryKey: dashboardKeys.heatmap(projectId),
     queryFn: async () => {
-      const response = await api.getViolationsHeatmap();
+      const response = await api.getViolationsHeatmap(projectId);
       return response.data as ViolationsHeatmap;
     },
   });
 }
 
-export function useTopViolations(limit: number = 5) {
+export function useTopViolations(limit: number = 5, projectId?: string) {
   return useQuery<TopViolation[]>({
-    queryKey: dashboardKeys.topViolations(limit),
+    queryKey: dashboardKeys.topViolations(limit, projectId),
     queryFn: async () => {
-      const response = await api.getTopViolations(limit);
+      const response = await api.getTopViolations(limit, projectId);
       return response.data as TopViolation[];
     },
   });
 }
 
-export function useRecentSubmissions() {
+export function useRecentSubmissions(projectId?: string) {
   return useQuery<RecentSubmission[]>({
-    queryKey: dashboardKeys.recentSubmissions(),
+    queryKey: dashboardKeys.recentSubmissions(projectId),
     queryFn: async () => {
-      const response = await api.getRecentSubmissions();
+      const response = await api.getRecentSubmissions(projectId);
       return response.data as RecentSubmission[];
     },
   });
