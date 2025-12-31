@@ -34,11 +34,11 @@ class ComplianceEngine:
     @staticmethod
     async def analyze_submission(submission_id: str, db: Session) -> ComplianceCheck:
         """
-        Entry point for compliance analysis (Backward Compatible).
-        Orchestrates the stateless flow in a loop for now (until API supports pause/resume).
+        Entry point for compliance analysis (Refactored to use LangGraph).
+        Orchestrates the flow via 'compliance_graph'.
         """
         try:
-            # 1. Initialize State
+            # 1. Initialize State & Data
             submission = db.query(Submission).filter(Submission.id == submission_id).first()
             if not submission:
                 raise ValueError(f"Submission {submission_id} not found")
@@ -47,50 +47,75 @@ class ComplianceEngine:
             submission.status = "analyzing"
             db.commit()
 
-            # Initialize Compliance State
-            state = ComplianceEngine.initialize_state(submission_id, submission.project_id)
-            
-            # Load Rules & Content (Context)
-            # In a fully stateless world, these might be passed in or loaded per step.
-            # For efficiency here, we load them once and pass them conceptually to the steps.
+            # Load Rules & Content
             rules = ComplianceEngine._load_active_rules(db, submission.project_id)
             content_service = ContentRetrievalService(db)
             chunks = content_service.get_analyzable_content(submission_id)
-            context_service = ContextEngineeringService(db)
             
-            state.total_chunks = len(chunks)
-            state.metadata["chunks_ids"] = [str(c.id) for c in chunks]
+            # Prepare Input for LangGraph
+            # We serialize chunks to dicts to match AgentState schema
+            chunks_data = [
+                {
+                    "id": str(c.id), 
+                    "text": c.text, 
+                    "chunk_index": c.chunk_index,
+                    "metadata": c.metadata
+                } 
+                for c in chunks
+            ]
             
-            logger.info(f"Starting analysis for {submission_id} with {len(chunks)} chunks")
+            initial_state = {
+                "submission_id": str(submission_id),
+                "project_id": str(submission.project_id) if submission.project_id else None,
+                "chunks": chunks_data,
+                "active_rules": rules,
+                "violations": [],
+                "scores": {},
+                "status": "running",
+                "messages": [],
+                "metadata": {"db_session": db} # Phase 1: Pass DB session via metadata
+            }
+            
+            logger.info(f"Starting LangGraph analysis for {submission_id} with {len(chunks)} chunks")
 
-            # 2. Run Workflow (Explicit Control Flow)
-            # Transition: Initialized -> Chunk Analysis
-            state.transition_to("analysis_running")
+            # 2. Invoke LangGraph
+            # Import here to avoid top-level circular dependency if any
+            from .agents.orchestration import compliance_graph
             
-            # Process ALL chunks (This could be broken down into individual job steps)
-            for chunk in chunks:
-                state = await ComplianceEngine.process_chunk_step(state, chunk, rules, context_service)
+            final_state_dict = await compliance_graph.ainvoke(initial_state)
             
-            # Transition: Analysis -> Scoring
-            state.transition_to("scoring")
-            state = ComplianceEngine.scoring_step(state, db)
+            logger.info("LangGraph execution completed.")
+
+            # 3. Persist Results (Map back to legacy ComplianceState for compatibility)
+            # We reuse the existing persist_results method which expects ComplianceState object
+            legacy_state = ComplianceState.construct(
+                submission_id=final_state_dict["submission_id"],
+                project_id=final_state_dict["project_id"],
+                current_step="completed",
+                status="completed",
+                violations=final_state_dict["violations"],
+                scores=final_state_dict["scores"],
+                total_chunks=len(chunks),
+                chunks=chunks, # Optional, if needed
+                metadata={
+                    "assessments": [m.content for m in final_state_dict.get("messages", []) if hasattr(m, 'content')],
+                    "graph_snapshot": "final"
+                }
+            )
+            # Manually set fields if construct doesn't handle defaults/validators same way, 
+            # but usually Pydantic construct is fast. 
+            # ComplianceState is Pydantic BaseModel.
             
-            # Transition: Scoring -> Finalizing
-            state.transition_to("finalizing")
-            compliance_check = ComplianceEngine.persist_results(state, db)
+            # Persist
+            compliance_check = ComplianceEngine.persist_results(legacy_state, db)
             
-            state.transition_to("completed")
-            state.status = "completed"
-            
-            logger.info(f"Analysis complete. Score: {state.scores.get('overall', 0)}")
             return compliance_check
 
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error analyzing submission: {str(e)}")
-            db.rollback()  # Rollback invalid transaction
+            db.rollback()
             if submission:
-                # Re-fetch submission in new transaction if needed, but session usually persists
                 submission.status = "failed"
                 db.add(submission)
                 db.commit()
@@ -286,12 +311,9 @@ class ComplianceEngine:
 
         for rule in rules:
             if rule.category not in grouped:
-                 grouped[rule.category] = []
+                grouped[rule.category] = []
             
-            # Context Window Management (Factor 3)
-            # Limit global rules, but maybe allow more for project specific?
-            if len(grouped[rule.category]) < 5:
-                grouped[rule.category].append(rule)
+            grouped[rule.category].append(rule)
 
         return grouped
 

@@ -14,6 +14,7 @@ class StandardComplianceAgent(ComplianceAgent):
     def __init__(self, category: str, context_service: ContextEngineeringService):
         self._category = category
         self.context_service = context_service
+        self.system_prompt = f"You are a specialist {self.category} compliance agent. Analyze the content against the provided rules. Return ONLY valid JSON."
         
     @property
     def category(self) -> str:
@@ -22,10 +23,6 @@ class StandardComplianceAgent(ComplianceAgent):
     @property
     def name(self) -> str:
         return self._category
-
-    @property
-    def system_prompt(self) -> str:
-        return f"You are a specialist {self.category} compliance agent. Analyze the content against the provided rules. Return ONLY valid JSON."
 
     async def analyze(self, content: str, rules: List[Rule], execution_id: str = None, db: Any = None) -> ComplianceAnalysisResult:
         # 1. Build Prompt (Context Engineering)

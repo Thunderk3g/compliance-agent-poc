@@ -242,8 +242,11 @@ async def stream_deep_analysis(
                 yield f"data: {json.dumps({'status': 'error', 'message': 'Compliance check not found'})}\n\n"
                 return
             
-            # Get active rules
-            active_rules = db.query(Rule).filter(Rule.is_active == True).all()
+            # Get active rules FOR THIS PROJECT
+            active_rules = db.query(Rule).filter(
+                Rule.is_active == True,
+                Rule.project_id == submission.project_id
+            ).all()
             
             # Segment document
             content = submission.original_content or ""
@@ -576,6 +579,7 @@ async def sync_deep_analysis_results(
                     violation_description=violation_description,
                     category=category,
                     severity=severity,
+                    project_id=check.submission.project_id,
                     db=db
                 )
                 
