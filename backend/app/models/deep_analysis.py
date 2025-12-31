@@ -8,7 +8,7 @@ This approach simplifies storage and retrieval while maintaining full audit trai
 from sqlalchemy import Column, Text, Numeric, ForeignKey, DateTime
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.sql import func
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, backref
 from ..database import Base
 import uuid
 
@@ -67,7 +67,7 @@ class DeepAnalysis(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     
     # Relationship to compliance check
-    compliance_check = relationship("ComplianceCheck", backref="deep_analysis")
+    compliance_check = relationship("ComplianceCheck", backref=backref("deep_analysis", cascade="all, delete-orphan", uselist=False))
     
     def __repr__(self):
         return f"<DeepAnalysis check_id={self.check_id} lines={self.total_lines} avg={self.average_score}>"

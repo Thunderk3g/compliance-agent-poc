@@ -242,6 +242,9 @@ export const api = {
   getProject: (projectId: string) =>
     apiClient.get(`/api/projects/${projectId}`),
 
+  deleteProject: (projectId: string) =>
+    apiClient.delete(`/api/projects/${projectId}`),
+
   uploadGuideline: (projectId: string, file: File) => {
     const formData = new FormData();
     formData.append('file', file);

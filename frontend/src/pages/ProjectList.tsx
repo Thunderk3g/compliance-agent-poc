@@ -1,5 +1,5 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { ArrowRight, Calendar, Folder, Plus } from 'lucide-react';
+import { ArrowRight, Calendar, Folder, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CreateProjectDialog } from '../components/projects/CreateProjectDialog';
@@ -23,6 +23,24 @@ export default function ProjectList() {
             setError("Failed to load projects.");
         } finally {
             setLoading(false);
+        }
+    };
+
+    const handleDeleteProject = async (e: React.MouseEvent, projectId: string) => {
+        e.preventDefault(); // Prevent navigation
+        e.stopPropagation(); // Stop event bubbling
+        
+        if (!window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
+            return;
+        }
+
+        try {
+            await api.deleteProject(projectId);
+            setProjects(projects.filter(p => p.id !== projectId));
+            // Optional: Show success toast if you have a toast system
+        } catch (err) {
+            console.error("Failed to delete project:", err);
+            setError("Failed to delete project");
         }
     };
 
@@ -85,6 +103,13 @@ export default function ProjectList() {
                                         <div className="p-2 bg-blue-100 text-blue-600 rounded-lg mb-2">
                                             <Folder className="w-5 h-5" />
                                         </div>
+                                        <button
+                                            onClick={(e) => handleDeleteProject(e, project.id)}
+                                            className="p-2 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded-full transition-colors z-10"
+                                            title="Delete Project"
+                                        >
+                                            <Trash2 className="w-5 h-5" />
+                                        </button>
                                     </div>
                                     <CardTitle className="text-xl group-hover:text-blue-600 transition-colors">
                                         {project.name}

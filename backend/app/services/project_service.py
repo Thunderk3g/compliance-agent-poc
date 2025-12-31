@@ -34,3 +34,26 @@ class ProjectService:
         if not projects:
             return self.create_project(user_id, "Default Project", "Your first project")
         return projects[0]
+
+    def delete_project(self, project_id: UUID) -> bool:
+        """Delete a project and all associated files."""
+        project = self.get_project(project_id)
+        if not project:
+            return False
+            
+        # Delete project directory from upload_dir
+        # Assuming settings is imported in routes, but better to import it here or use the path from config
+        from ..config import settings
+        import os
+        import shutil
+        
+        upload_dir = os.path.join(settings.upload_dir, str(project_id))
+        if os.path.exists(upload_dir):
+            try:
+                shutil.rmtree(upload_dir)
+            except OSError as e:
+                print(f"Error deleting project directory: {e}")
+                
+        self.db.delete(project)
+        self.db.commit()
+        return True
