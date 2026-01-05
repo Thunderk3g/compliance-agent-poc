@@ -121,6 +121,25 @@ def get_project(
          raise HTTPException(status_code=403, detail="Not authorized to view this project")
     return project
 
+@router.delete("/{project_id}")
+def delete_project(
+    project_id: UUID,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    service = ProjectService(db)
+    project = service.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.created_by != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to delete this project")
+        
+    success = service.delete_project(project_id)
+    if not success:
+         raise HTTPException(status_code=500, detail="Failed to delete project")
+         
+    return {"success": True, "message": "Project deleted successfully"}
+
 @router.get("/{project_id}/guidelines", response_model=List[GuidelineResponse])
 def get_project_guidelines(
     project_id: UUID,
