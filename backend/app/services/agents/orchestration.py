@@ -37,6 +37,7 @@ class AgentState(TypedDict):
     
     # For HITL
     user_feedback: Optional[str]
+    user_id: Optional[str]
 
 # --- Nodes ---
 
@@ -112,14 +113,17 @@ async def node_compliance_specialist(state: AgentState):
             try:
                 sub_uuid = UUID(submission_id)
                 proj_uuid = UUID(state.get("project_id")) if state.get("project_id") else None
+                user_uuid = UUID(state.get("user_id")) if state.get("user_id") else None
             except:
                 sub_uuid = None
                 proj_uuid = None
+                user_uuid = None
 
             execution = AgentExecution(
                 agent_type=category,
                 session_id=sub_uuid, 
                 project_id=proj_uuid,
+                user_id=user_uuid,
                 status="running",
                 input_data={"chunk_index": chunk_index, "text_preview": chunk_text[:100]}
             )
@@ -128,17 +132,26 @@ async def node_compliance_specialist(state: AgentState):
             
             try:
                 # Agent Analysis
+                start_time = datetime.datetime.now()
                 analysis_result = await agent.analyze(
                     content=chunk_text, 
                     rules=category_rules,
                     execution_id=str(execution.id),
                     db=db
                 )
+                end_time = datetime.datetime.now()
                 
                 # Update Execution Success
                 execution.status = "completed"
                 execution.output_data = analysis_result.model_dump(mode='json')
-                execution.completed_at = datetime.datetime.now()
+                execution.completed_at = end_time
+                execution.execution_time_ms = int((end_time - start_time).total_seconds() * 1000)
+                
+                # Aggregate tokens from tool invocations
+                from ...models.tool_invocation import ToolInvocation
+                tool_invocations = db.query(ToolInvocation).filter(ToolInvocation.execution_id == execution.id).all()
+                execution.total_tokens_used = sum(inv.tokens_used for inv in tool_invocations)
+                
                 db.commit()
 
                 # Accumulate Results

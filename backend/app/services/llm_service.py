@@ -141,6 +141,20 @@ class LLMService:
                 
                 # Record metrics if execution_id is provided
                 if execution_id and db:
+                     # Get token usage from response if available
+                     token_usage = 0
+                     if hasattr(response, 'usage') and response.usage:
+                         token_usage = response.usage.total_tokens
+                     # Fallback to checking model_extra/usageMetadata for raw Gemini responses if usage is missing
+                     elif hasattr(response, 'model_extra') and response.model_extra and 'usageMetadata' in response.model_extra:
+                         token_usage = response.model_extra['usageMetadata'].get('totalTokenCount', 0)
+                     # Fallback to checking dict-access if response allows it and usageMetadata is at top level
+                     elif hasattr(response, 'get') and response.get('usageMetadata'):
+                          token_usage = response.get('usageMetadata').get('totalTokenCount', 0)
+                     else:
+                         # Fallback estimate (chars / 4)
+                         token_usage = (len(prompt) + len(response_text)) // 4
+
                      await self._record_tool_invocation(
                         db=db,
                         execution_id=execution_id,
@@ -149,7 +163,7 @@ class LLMService:
                         output_data=result.model_dump(mode='json'),
                         start_time=start_time,
                         end_time=end_time,
-                        tokens=len(prompt) + len(response_text) # Rough estimate
+                        tokens=token_usage
                      )
                 
                 return result

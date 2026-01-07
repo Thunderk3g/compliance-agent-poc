@@ -81,6 +81,7 @@ class ComplianceEngine:
             initial_state = {
                 "submission_id": str(submission_id),
                 "project_id": str(submission.project_id) if submission.project_id else None,
+                "user_id": str(submission.submitted_by) if submission.submitted_by else None,
                 "chunks": chunks_data,
                 "active_rules": rules_serializable,
                 "violations": [],
@@ -328,35 +329,49 @@ class ComplianceEngine:
             
             logger.info(f"Invoking {category} agent for chunk {chunk.chunk_index}")
             
+            # Retrieve user_id from submission
+            user_id = None
+            try:
+                sub = context_service.db.query(Submission).filter(Submission.id == state.submission_id).first()
+                if sub:
+                    user_id = sub.submitted_by
+            except Exception as e:
+                logger.warning(f"Failed to retrieve user_id for submission {state.submission_id}: {e}")
+
             # Create Execution Record
             execution = AgentExecution(
                 agent_type=category,
-                session_id=uuid.UUID(state.submission_id), # Assuming submission_id is session for now, or generate new
+                session_id=uuid.UUID(state.submission_id), 
                 project_id=uuid.UUID(state.project_id) if state.project_id else None,
+                user_id=user_id,
                 status="running",
                 input_data={"chunk_index": chunk.chunk_index, "text_preview": chunk.text[:100]}
             )
-            db = context_service.db # Access DB from context service or pass it in. Wait, process_chunk_step signature doesn't have db.
-            # I need to check where db comes from. process_chunk_step signature:
-            # async def process_chunk_step(state, chunk, rules, context_service)
-            # context_service has self.db. I verified initialization in analyze_submission: context_service = ContextEngineeringService(db)
-            
             context_service.db.add(execution)
             context_service.db.commit() # Commit to get ID
             
             try:
                 # Agent Analysis
+                start_time = datetime.now()
                 analysis_result = await agent.analyze(
                     content=chunk.text, 
                     rules=category_rules,
                     execution_id=str(execution.id),
                     db=context_service.db
                 )
+                end_time = datetime.now()
                 
                 # Update Execution Success
                 execution.status = "completed"
                 execution.output_data = analysis_result.model_dump(mode='json')
-                execution.completed_at = datetime.now()
+                execution.completed_at = end_time
+                execution.execution_time_ms = int((end_time - start_time).total_seconds() * 1000)
+                
+                # Aggregate tokens
+                from ..models.tool_invocation import ToolInvocation
+                tool_invocations = context_service.db.query(ToolInvocation).filter(ToolInvocation.execution_id == execution.id).all()
+                execution.total_tokens_used = sum(inv.tokens_used for inv in tool_invocations)
+                
                 context_service.db.commit()
 
                 # Accumulate Results
