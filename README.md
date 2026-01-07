@@ -1,161 +1,175 @@
-# Compliance Agent POC
+# Compliance Agent POC - Technical Documentation
 
-> **AI-Powered Compliance Automation for Insurance Marketing**
+## 1. System Vision & Core Value Proposition
 
-The **Compliance Agent POC** is an advanced, AI-driven system designed to automate the validation of marketing content against regulatory standards (IRDAI), brand guidelines, and SEO best practices. By leveraging local LLMs (Ollama/Qwen) and precise token-based chunking, it delivers accurate, context-aware compliance checks and actionable fix suggestions.
+The **Compliance Agent POC** represents a paradigm shift from manual, error-prone compliance checking to an automated, AI-driven validation engine. Traditional compliance involves human reviewers manually cross-referencing marketing content against complex, ever-changing regulatory guidelines—a process that is slow, inconsistent, and unscalable.
 
----
+**Core Value Proposition:**
 
-## 🚀 Key Features & Capabilities
-
-### 1. Intelligent Compliance Analysis (Phase 1)
-- **Multi-Dimensional Scoring**: Evaluates content across **IRDAI Regulations** (50%), **Brand Guidelines** (30%), and **SEO Standards** (20%).
-- **AI-Powered Violation Detection**: Goes beyond keyword matching to understand context and intent using the `qwen2.5:7b` model.
-- **Automated Fix Suggestions**: Provides rewritten content snippets to resolve specific violations.
-- **Support for Multiple Formats**: PDF, DOCX, HTML, and Markdown.
-
-### 2. Dynamic Rule Management (Phase 2 - Admin)
-- **Rule Generation from Documents**: Super Admins can upload regulatory PDFs/DOCs, and the system automatically extracts and structures new compliance rules.
-- **Admin Dashboard**: A dedicated interface to view, edit, search, and manage rules.
-- **Configurable Scoring**: Fine-tune point deductions (e.g., -20 for Critical) directly from the dashboard without code changes.
-
-### 3. Advanced Content Processing
-- **Token-Based Chunking**: Replaced character-based splitting with a robust token-aware system (via `tiktoken`/`transformers`) to ensure optimal LLM context window usage and semantic preservation.
-- **Page-Aware Processing**: Tracks PDF page numbers for precise violation attribution.
+- **Automated Validation:** Instantly analyzes PDF/DOCX marketing materials against strict regulatory standards (IRDAI), brand guidelines, and SEO best practices.
+- **AI-Driven Fixes:** Going beyond simple flagging, the system acts as an agentic partner, suggesting specific, context-aware text rewrites to resolve violations.
+- **Dynamic Rule Engine:** Empowers business users to upload raw regulation documents and have the AI automatically extract, categorize, and deploy executable compliance rules.
+- **12-Factor Agent Design:** Built on "Stateless Reducer" principles, ensuring deterministic, reproducible, and scalable agent execution.
 
 ---
 
-## 🔄 Core Workflows
+## 2. Architectural Deep-Dive
 
-### Workflow 1: Compliance Analysis (User Flow)
-```mermaid
-graph LR
-    A[User Uploads Content] --> B{Content Parser}
-    B --> C[Token Chunker]
-    C --> D[Compliance Engine]
-    D --> E{Ollama LLM}
-    E --> F[Violation Detection]
-    F --> G[Scoring Service]
-    G --> H[Results Dashboard]
-```
-1. **Upload**: User uploads a file (PDF/DOCX/HTML).
-2. **Chunking**: System splits text into token-optimized chunks (default 900 tokens) with overlap to preserve context.
-3. **Analysis**: Each chunk is analyzed by the LLM against active rules.
-4. **Aggregation**: Violations and scores are aggregated to generate a final Report Card and Grade (A-F).
+The system follows a modern, containerized microservices architecture composed of a FastAPI backend and a React/TypeScript frontend.
 
-### Workflow 2: Dynamic Rule Generation (Admin Flow)
-```mermaid
-graph LR
-    A[Admin Uploads Reg Doc] --> B[Content Parser]
-    B --> C[Rule Generator Service]
-    C --> D{Ollama LLM}
-    D --> E[JSON Extraction]
-    E --> F[Validation & Storage]
-    F --> G[db: Rules Table]
-```
-1. **Upload**: Admin uploads a new guideline document (e.g., "New IRDAI 2025 Specs").
-2. **Extraction**: LLM processes the text to identify constraints and requirements.
-3. **Structured Output**: Extracts rules with `category`, `severity`, `keywords`, and `points_deduction`.
-4. **Storage**: Validated rules are saved to the database and become immediately active for future checks.
+### Service Orchestration (Docker Compose)
 
----
+The entire stack is managed via `docker-compose`, orchestrating the following services:
 
-## 🏗 System Architecture
+| Service        | Technology       | Role                                                         |
+| :------------- | :--------------- | :----------------------------------------------------------- |
+| **`backend`**  | Python (FastAPI) | Core API, Compliance Engine, Agent Orchestration             |
+| **`frontend`** | React + Vite     | User Interface for Submissions, Results, and Admin           |
+| **`postgres`** | PostgreSQL 15    | Primary relational database (Rules, Submissions, Violations) |
+| **`redis`**    | Redis 7          | High-performance cache and message broker for async tasks    |
+| **`pgadmin`**  | pgAdmin 4        | Database administration interface                            |
 
-The system follows a modern, containerized microservices architecture.
+### Backend Architecture (FastAPI)
 
-### Technology Stack
-| Component | Technology | Description |
-|-----------|------------|-------------|
-| **Frontend** | React 18, TypeScript, Tailwind | Responsive dashboard and admin UI |
-| **Backend** | FastAPI (Python 3.11) | High-performance async API |
-| **Database** | PostgreSQL 15 | Relational data + JSONB for flexible storage |
-| **Vector/AI** | Ollama (Qwen 2.5) | Local LLM inference engine |
-| **Caching** | Redis 7 | Session storage and caching |
-| **Processing** | Tiktoken, SpaCy | NLP and tokenization utilities |
-| **Infra** | Docker Compose | Orchestration and deployment |
+- **Framework:** FastAPI for high-performance, async API endpoints.
+- **Agent Framework:** Implements **LangGraph** for stateful, multi-step agent workflows (Human-in-the-Loop).
+- **Dependency Injection:** Utilizes FastAPI's `Depends` for database sessions (`deps.py`) and authentication.
+- **Modular Services:** Business logic is encapsulated in dedicated services (`compliance_engine.py`, `rule_generator_service.py`), keeping routers clean.
 
-### Directory Structure
-```
-compliance-agent-poc/
-├── backend/
-│   ├── app/
-│   │   ├── services/           # Core business logic
-│   │   │   ├── compliance_engine.py  # Analysis orchestrator
-│   │   │   ├── rule_generator.py     # Rule extraction (Phase 2)
-│   │   │   ├── preprocessing.py      # Token chunking logic
-│   │   │   └── ollama_service.py     # LLM interface
-│   │   ├── api/                # REST endpoints
-│   │   └── models/             # SQLAlchemy schemas
-├── frontend/
-│   ├── src/
-│   │   ├── pages/              # UI Pages (Dashboard, Admin, Results)
-│   │   ├── components/         # Reusable UI elements
-│   │   └── lib/                # API clients and types
-├── docker-compose.yml          # Service definition
-└── PHASE2_SUMMARY.md           # Detailed Phase 2 docs
-```
+### Frontend Architecture (React/TypeScript)
+
+- **Framework:** Vite + React 18 for a fast, responsive SPA experience.
+- **Styling:** Tailwind CSS for a modern, "Golden Ratio" inspired aesthetic.
+- **State Management:** React Query (implied via API hooks) for server state synchronization.
+- **Key Components:**
+  - `Results.tsx`: Sophisticated report card view using Radar charts and Heatmaps.
+  - `AdminDashboard.tsx`: Interface for managing and refining the rule set.
 
 ---
 
-## 💻 Getting Started
+## 3. The AI Pipeline (The 'Engine')
 
-### Prerequisites
-- Docker Desktop installed
-- Git
-- 8GB+ RAM (Recommended for LLM)
+The heart of the system is a multi-stage AI pipeline designed for precision and context awareness.
 
-### Installation & Run
-1. **Clone the repository**:
-   ```bash
-   git clone <repo-url>
-   cd compliance-agent-poc
-   ```
+### 3.1 Token-Based Chunking (Context Management)
 
-2. **Start Services**:
-   ```bash
-   docker-compose up -d
-   ```
+To handle large compliance documents within LLM context windows without losing meaning, the **Context Engineering Service** (`preprocessing_service.py`) implements advanced chunking:
 
-3. **Initialize System** (First run only):
-   ```bash
-   # Pull the AI Model
-   docker-compose exec ollama ollama pull qwen2.5:7b
+- **Tokenizer:** Uses `tiktoken` (cl100k_base) for precise token counting, falling back to HuggingFace `transformers`.
+- **Logic:**
+  1.  **Segmentation:** Splits text into sentences (using `spaCy` or regex).
+  2.  **Greedy Packing:** packs sentences into chunks (default 900 tokens).
+  3.  **Overlap:** Maintains a sliding window overlap (200 tokens) to preserve cross-chunk context.
+  4.  **Metadata:** Tags chunks with page numbers (PDF) or offsets for precise violation location tracking.
 
-   # Run DB Migrations
-   docker-compose exec backend alembic upgrade head
+### 3.2 Compliance Engine & Scoring
 
-   # Seed Default Rules & Super Admin
-   docker-compose exec backend python -m app.seed_data
-   ```
+The `ComplianceEngine` acts as a central orchestrator:
 
-4. **Access the Application**:
-   - **Frontend**: [http://localhost:5173](http://localhost:5173)
-   - **Admin Dashboard**: [http://localhost:5173/admin](http://localhost:5173/admin)
-   - **API Docs**: [http://localhost:8000/docs](http://localhost:8000/docs)
+1.  **State Initialization:** Creates a `ComplianceState` object to track progress.
+2.  **Sub-Agent Dispatch:** Dynamically spawns specialized sub-agents based on active rule categories (Factor 10: Configurable Sub-Agents).
+3.  **Analysis:** Agents process chunks against loaded rules using LLMs (e.g., Gemini 2.0 Flash).
+4.  **Scoring Strategy:**
+    Violations are aggregated and scored using a weighted multi-dimensional model:
+    - **IRDAI (Regulatory):** 50% weight (Critical for legal safety)
+    - **Brand Guidelines:** 30% weight (Voice & Identity)
+    - **SEO Best Practices:** 20% weight (Discoverability)
+      _Final Grades (A-F) are derived from these weighted scores._
 
----
+### 3.3 Rule Generator (Phase 2)
 
-## 📚 Documentation Index
+Allows "Zero-Touch" rule creation from raw documents:
 
-For deeper dives into specific components, refer to these documents:
-
-- **[PROJECT_UNDERSTANDING.md](PROJECT_UNDERSTANDING.md)**: Master document detailing the entire system, database schema, and API contracts.
-- **[PHASE2_SUMMARY.md](PHASE2_SUMMARY.md)**: Specific details on the Dynamic Rule Generation and Admin Dashboard implementation.
-- **[TOKEN_BASED_CHUNKING.md](TOKEN_BASED_CHUNKING.md)**: Technical deep-dive into the tokenization and chunking algorithms.
-- **[plan.md](plan.md)**: Original implementation plan and architectural decisions.
+1.  **Ingestion:** Parses uploaded PDF/DOCX files.
+2.  **Extraction:** LLM analyzes content to identify prescriptive statements.
+3.  **Structuring:** Converts unstructured text into JSON objects with:
+    - `category` (IRDAI/Brand/SEO)
+    - `severity` (Critical/High/Medium/Low)
+    - `keywords`
+    - `logic` (Pattern matching conditions - Phase 3)
+4.  **Refinement:** Includes an AI-powered refinement loop for Super Admins to polish rule definitions before deployment.
 
 ---
 
-## 🛡 Security & Role-Based Access (POC)
+## 4. Data Architecture
 
-- **Agent**: Can upload and analyze submissions.
-- **Super Admin**: Has full access to the **Admin Dashboard** to generate, edit, and delete rules.
-- **Authentication**: Currently uses header-based auth (`X-User-Id`) for the POC.
+### PostgreSQL 15 Schema
 
-## 🔮 Future Roadmap
+The database is designed for flexibility, leveraging `JSONB` for evolving AI requirements.
 
-- [ ] **Auth**: Implementation of JWT/OAuth2.
-- [ ] **Async Processing**: Celery integration for handling large document queues.
-- [ ] **Real-Time**: WebSocket updates for analysis progress.
-- [ ] **Governance**: Audit trails for rule changes and deeper compliance reporting.
+- **`rules` table:** Stores compliance logic.
+  - `rule_text`: Natural language description.
+  - `pattern`: `JSONB` field storing structured conditions or regex for hybrid checking.
+  - `is_active`: Soft-delete mechanism.
+- **`submissions` table:** Tracks document state (Uploaded -> Preprocessing -> Analyzed).
+- **`compliance_checks` & `violations`:** Relational storage for audit trails.
+- **`agent_executions`:** Logs every AI interaction (tokens, latency, prompt) for observability.
+
+### Redis 7
+
+- Used as a backing store for **LangGraph** checkpoints (persistence layer) to enable Human-in-the-Loop (HITL) workflows like pausing analysis for user review.
+- Acts as the message broker for asynchronous processing queues (Celery/background tasks).
+
+---
+
+## 5. Component Breakdown
+
+### Backend Map
+
+- **`services/compliance_engine.py`**: The "Brain". Orchestrates the checking flow, manages state, and persists results.
+- **`services/rule_generator_service.py`**: The "Teacher". Extracts new logic from documents.
+- **`services/preprocessing_service.py`**: The "Librarian". Chunks and indexes content.
+- **`api/routes/`**:
+  - `/compliance`: Endpoints for starting checks (`POST /analyze/{id}`) and retrieving results.
+  - `/admin`: Implementation of rule management (CRUD).
+
+### Frontend Structure
+
+- **Results Dashboard (`pages/Results.tsx`)**:
+  - Displays the "Report Card" with A-F grades.
+  - Interactive "Detailed Violations" tab showing exact text overlays.
+  - "Deep Research" tab for complex reasoning traces.
+- **Admin Dashboard (`pages/AdminDashboard.tsx`)**:
+  - Table view of active rules.
+  - Stats cards for rule coverage (System Health).
+
+---
+
+## 6. Security & Access Control
+
+The POC implements a lightweight but robust security model suitable for demonstration and internal use.
+
+### Authentication
+
+- **Header-Based Auth:** identification is handled via the `X-User-Id` header.
+- **Middleware:** `get_current_user_id` dependency in `dpes.py` validates this header on every protected request.
+- **Auto-Provisioning:** For the POC, if a valid UUID is passed in `X-User-Id` that doesn't exist, a "Default User" is automatically provisioned to facilitate frictionless testing.
+
+### Role-Based Access Control (RBAC)
+
+- **Roles:** `super_admin`, `standard_user`.
+- **Enforcement:**
+  - **Super Admin:** Full access to Rule Generation, Deletion, and System Configuration.
+  - **Standard User:** Can upload submissions and view results but _cannot_ modify the Global Rule Set.
+  - _Implementation:_ `require_super_admin` logic in `RuleGeneratorService`.
+
+---
+
+## 7. Implementation Roadmap
+
+- **Phase 1: Core Engine (Completed)**
+
+  - PDF/Text ingestion
+  - Basic Rule implementation
+  - MVP Results Dashboard
+
+- **Phase 2: Dynamic Rules & Admin (Current)**
+
+  - Rule Generator (LLM Extraction)
+  - Admin Dashboard
+  - Token-based Chunking
+
+- **Phase 3: Deep Analysis & Verification (Next)**
+  - "Enterprise Architect" Agent for complex, cross-document reasoning.
+  - Automated Regression Testing for rules.
+  - Hybrid Rule Logic (combining Regex + Semantic Search).
