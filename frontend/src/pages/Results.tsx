@@ -16,6 +16,7 @@ import AutoFixabilityAnalysis from '../components/results/analytics/AutoFixabili
 import PDFModificationPanel from '../components/results/PDFModificationPanel';
 import { DeepAnalysisPanel } from '../components/compliance';
 import { ChunkViewer } from '../components/compliance/ChunkViewer';
+import { ReviewAction } from '../components/results/ReviewAction';
 import { parseChunkLocation, isChunkBasedLocation } from '../utils/ChunkLocationParser';
 
 interface ResultsProps {
@@ -44,37 +45,49 @@ export const Results: React.FC<ResultsProps> = ({ submissionId }) => {
       setLoading(true);
       setError(null);
 
-      // Fetch compliance results
-      const resultsResponse = await api.getComplianceResults(id!);
-      setResults(resultsResponse.data);
-
-      // Fetch submission details for PDF functionality and chunk info
+      // Always fetch submission details first (to check status even if analysis isn't done)
       try {
-        const submissionResponse = await api.getSubmissionById(id!);
-        setSubmission(submissionResponse.data);
-
-        // Fetch chunks if submission has been preprocessed
-        if (submissionResponse.data.status === 'preprocessed' ||
-          submissionResponse.data.status === 'analyzed') {
-          try {
-            const chunksResponse = await api.getSubmissionChunks(id!);
-            const chunksData: ContentChunk[] = chunksResponse.data.chunks || [];
-
-            // Store chunks in map for quick lookup
-            const chunksMap = new Map<string, ContentChunk>();
-            chunksData.forEach(chunk => {
-              chunksMap.set(chunk.id, chunk);
-            });
-            setChunks(chunksMap);
-
-            console.log(`Loaded ${chunksData.length} chunks for submission`);
-          } catch (chunkErr) {
-            console.warn('Could not fetch chunks:', chunkErr);
+          const submissionResponse = await api.getSubmissionById(id!);
+          setSubmission(submissionResponse.data);
+          
+          if (submissionResponse.data.status === 'preprocessed' || 
+             submissionResponse.data.status === 'analyzed') {
+              // Fetch chunks
+               const chunksResponse = await api.getSubmissionChunks(id!);
+               const chunksData: ContentChunk[] = chunksResponse.data.chunks || [];
+               const chunksMap = new Map<string, ContentChunk>();
+               chunksData.forEach(chunk => chunksMap.set(chunk.id, chunk));
+               setChunks(chunksMap);
           }
-        }
       } catch (err) {
-        console.warn('Could not fetch submission details:', err);
+          console.warn('Could not fetch submission details:', err);
       }
+
+      // Fetch compliance results
+      try {
+          const resultsResponse = await api.getComplianceResults(id!);
+          setResults(resultsResponse.data);
+      } catch (resErr: any) {
+          console.log("Compliance results not found or fetch failed. Checking submission status...");
+          
+          // If 404 AND we are waiting for review, try fetching interim results
+          if (resErr.response && resErr.response.status === 404) {
+             try {
+                 // Check status from the submission fetch above, or just try fetching interim
+                 const interimResponse = await api.getInterimResults(id!);
+                 console.log("Loaded interim results for HITL");
+                 setResults(interimResponse.data);
+                 // Clear error if we succeeded
+                 setError(null);
+             } catch (interimErr) {
+                 console.warn("Retrying fetch interim failed:", interimErr);
+                 // Don't throw here, let the render logic handle the fallback
+             }
+          } else {
+             throw resErr; // Re-throw real errors
+          }
+      }
+
     } catch (error: any) {
       console.error('Failed to fetch results:', error);
       setError(
@@ -111,6 +124,7 @@ export const Results: React.FC<ResultsProps> = ({ submissionId }) => {
       passed: { bg: 'bg-green-100', text: 'text-green-800', label: 'Passed' },
       flagged: { bg: 'bg-yellow-100', text: 'text-yellow-800', label: 'Flagged' },
       failed: { bg: 'bg-red-100', text: 'text-red-800', label: 'Failed' },
+      waiting_for_review: { bg: 'bg-indigo-100', text: 'text-indigo-800', label: 'Waiting for Review' },
     };
     const badge = badges[status] || badges.flagged;
     return (
@@ -135,8 +149,35 @@ export const Results: React.FC<ResultsProps> = ({ submissionId }) => {
     );
   }
 
-  // Error State
+  // Error State - Check if we are waiting for review
+  // logic moved to fetchResults and Render
+  // if (submission && submission.status === 'waiting_for_review') { ... } 
+  
   if (error || !results) {
+      if (submission && submission.status === 'waiting_for_review') {
+          // If we failed to get interim results (e.g. backend restart lost memory state), 
+          // fall back to the simple card
+          return (
+              <div className="flex flex-col items-center justify-center py-20 animate-fade-in">
+                  <h2 className="text-2xl font-bold text-gray-900 mb-2">Compliance Analysis Paused</h2>
+                  <p className="text-gray-600 mb-8 max-w-lg text-center">
+                      The AI agent has paused the analysis and requires human input to proceed.
+                      <br/>
+                      <span className="text-sm text-red-500 block mt-2">
+                          (Interim results could not be loaded - server execution state may have been lost)
+                      </span>
+                  </p>
+                  
+                  <ReviewAction 
+                      submissionId={id!} 
+                      onReviewComplete={() => {
+                          setTimeout(fetchResults, 2000);
+                      }} 
+                  />
+              </div>
+          );
+      }
+
     return (
       <div className="flex flex-col items-center justify-center py-20">
         <svg
@@ -170,6 +211,18 @@ export const Results: React.FC<ResultsProps> = ({ submissionId }) => {
 
   return (
     <div className="space-y-8 pb-12">
+      {/* HITL Action Bar */}
+      {results.status === 'waiting_for_review' && (
+        <div className="animate-fade-in mb-6">
+            <ReviewAction 
+                submissionId={results.submission_id} 
+                onReviewComplete={() => {
+                   setLoading(true); // Show loading immediately
+                   setTimeout(fetchResults, 2000); // Poll for update
+                }} 
+            />
+        </div>
+      )}
       {/* Header Section */}
       <div className="bg-gradient-to-r from-blue-50 to-indigo-50 rounded-lg p-6 border border-blue-200">
         <div className="flex items-start justify-between mb-4">

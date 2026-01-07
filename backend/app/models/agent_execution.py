@@ -30,6 +30,8 @@ class AgentExecution(Base):
     # Relationships
     tool_invocations = relationship("ToolInvocation", back_populates="execution",
                                      cascade="all, delete-orphan")
+    traces = relationship("AgentTrace", back_populates="execution", 
+                          cascade="all, delete-orphan", order_by="AgentTrace.created_at")
     
     def __repr__(self):
         return f"<AgentExecution {self.agent_type} session={self.session_id}>"

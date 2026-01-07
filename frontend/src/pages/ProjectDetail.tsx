@@ -349,6 +349,7 @@ export default function ProjectDetail() {
             failed: 'bg-red-100 text-red-800',
             pending: 'bg-yellow-100 text-yellow-800',
             completed: 'bg-green-100 text-green-800',
+            waiting_for_review: 'bg-amber-100 text-amber-800 border-amber-200',
         };
         return <Badge className={`${colors[status] || 'bg-gray-100'} border-0`}>{status}</Badge>;
     };
@@ -737,6 +738,16 @@ export default function ProjectDetail() {
                                                                 className="px-3 py-1.5 text-sm font-medium text-blue-700 bg-blue-50 hover:bg-blue-100 rounded-lg transition-colors"
                                                             >
                                                                 {actionLoading[sub.id] ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Analyze'}
+                                                            </button>
+                                                        )}
+
+                                                        {/* Review Action */}
+                                                        {sub.status === 'waiting_for_review' && (
+                                                            <button
+                                                                onClick={() => setSelectedSubmissionId(sub.id)}
+                                                                className="px-3 py-1.5 text-sm font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 rounded-lg transition-colors flex items-center gap-1 animate-pulse"
+                                                            >
+                                                                Review Now <ArrowRight className="w-3 h-3" />
                                                             </button>
                                                         )}
 

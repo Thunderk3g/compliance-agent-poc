@@ -1,7 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
+from pydantic import BaseModel
 import uuid
 import logging
 import json
@@ -59,6 +60,73 @@ def get_compliance_results(
     return response
 
 
+class ResumeRequest(BaseModel):
+    decision: str
+    feedback: Optional[str] = None
+
+
+@router.post("/{submission_id}/resume", response_model=ComplianceCheckResponse)
+async def resume_compliance_check(
+    submission_id: uuid.UUID,
+    request: ResumeRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Resume a paused compliance check with human feedback.
+    """
+    from ...services.compliance_engine import compliance_engine
+    
+    # Format feedback
+    feedback_str = f"Decision: {request.decision}. Feedback: {request.feedback or 'None'}"
+    
+    try:
+        check = await compliance_engine.resume_submission(
+            submission_id=str(submission_id),
+            formatted_feedback=feedback_str,
+            db=db
+        )
+        
+        if not check:
+             # Still paused or something
+             # If check is None, it means it paused again or returned early
+             # We should probably return the current status
+             # Fetch separate check if needed or handle 202
+             
+             # Check if submission status is 'waiting_for_review' or 'analyzing'
+             sub = db.query(Submission).filter(Submission.id == submission_id).first()
+             if sub and sub.status == 'waiting_for_review':
+                 # It paused again
+                  raise HTTPException(status_code=202, detail="Compliance check resumed but paused again for further review.")
+             
+             # If it finished but returned None (unlikely given logic), handle
+             raise HTTPException(status_code=500, detail="Unknown error resuming check")
+
+        # Load violations for response
+        violations = db.query(Violation).filter(Violation.check_id == check.id).all()
+
+        response = ComplianceCheckResponse(
+            id=check.id,
+            submission_id=check.submission_id,
+            overall_score=float(check.overall_score),
+            irdai_score=float(check.irdai_score),
+            brand_score=float(check.brand_score),
+            seo_score=float(check.seo_score),
+            status=check.status,
+            grade=check.grade,
+            ai_summary=check.ai_summary,
+            check_date=check.check_date,
+            has_deep_analysis=True if check.deep_analysis else False,
+            violations=[ViolationResponse.from_orm(v) for v in violations]
+        )
+        return response
+
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        logger.error(f"Resume failed: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Resume failed: {str(e)}")
+
+
 @router.get("/{submission_id}/violations", response_model=List[ViolationResponse])
 def get_violations(
     submission_id: uuid.UUID,
@@ -75,6 +143,24 @@ def get_violations(
     violations = db.query(Violation).filter(Violation.check_id == check.id).all()
 
     return violations
+
+
+@router.get("/{submission_id}/interim-results", response_model=ComplianceCheckResponse)
+async def get_interim_results(
+    submission_id: uuid.UUID,
+    db: Session = Depends(get_db)
+):
+    """
+    Get interim (paused) compliance check results for a submission waiting for review.
+    """
+    from ...services.compliance_engine import compliance_engine
+    
+    result = await compliance_engine.get_interim_results(str(submission_id), db)
+    
+    if not result:
+        raise HTTPException(404, "No interim results found (Graph state might be missing)")
+        
+    return ComplianceCheckResponse(**result)
 
 
 # =============================================================================
@@ -242,8 +328,11 @@ async def stream_deep_analysis(
                 yield f"data: {json.dumps({'status': 'error', 'message': 'Compliance check not found'})}\n\n"
                 return
             
-            # Get active rules
-            active_rules = db.query(Rule).filter(Rule.is_active == True).all()
+            # Get active rules FOR THIS PROJECT
+            active_rules = db.query(Rule).filter(
+                Rule.is_active == True,
+                Rule.project_id == submission.project_id
+            ).all()
             
             # Segment document
             content = submission.original_content or ""
@@ -576,6 +665,7 @@ async def sync_deep_analysis_results(
                     violation_description=violation_description,
                     category=category,
                     severity=severity,
+                    project_id=check.submission.project_id,
                     db=db
                 )
                 

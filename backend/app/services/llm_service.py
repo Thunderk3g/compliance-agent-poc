@@ -1,12 +1,11 @@
-
 import json
 import asyncio
 import time
+import os
 from typing import Dict, Any, Optional, List, Type, TypeVar
 from sqlalchemy.orm import Session
 from ..models.tool_invocation import ToolInvocation
 import logging
-import os
 from datetime import datetime
 from pydantic import BaseModel, ValidationError
 from ..config import settings
@@ -24,6 +23,10 @@ class LLMService:
         self.api_key = settings.llm_api_key
         self.base_url = settings.llm_base_url
         self.model = settings.llm_model
+        
+        # Logging config
+        self.log_file = os.path.join("logs", "log.json")
+        os.makedirs("logs", exist_ok=True)
         
         # Initialize OpenAI client
         # Note: If api_key is empty, this might raise error on instantiation or first call depending on lib version.
@@ -64,7 +67,12 @@ class LLMService:
                 messages=messages,
                 temperature=0.7
             )
-            return response.choices[0].message.content.strip()
+            response_text = response.choices[0].message.content.strip()
+            
+            # Log interaction
+            await self._log_to_json(prompt, response_text, system_prompt, context)
+            
+            return response_text
 
         except Exception as e:
             logger.error(f"LLM generation failed: {str(e)}")
@@ -112,6 +120,10 @@ class LLMService:
                 )
                 response_text = response.choices[0].message.content.strip()
                 
+                # Log interaction
+                await self._log_to_json(prompt, response_text, system_prompt, context)
+                
+                
                 # Parse and Clean JSON (in case response format didn't work perfectly or extra text)
                 if "```json" in response_text:
                     start = response_text.find("```json") + 7
@@ -155,6 +167,38 @@ class LLMService:
                 current_messages.append({"role": "user", "content": error_feedback})
                 
                 await asyncio.sleep(1)
+
+    async def _log_to_json(self, prompt: str, response: str, system_prompt: str = None, context: Dict = None):
+        """Log LLM interaction to log.json."""
+        try:
+            log_entry = {
+                "timestamp": datetime.now().isoformat(),
+                "model": self.model,
+                "system_prompt": system_prompt,
+                "context": context,
+                "prompt": prompt,
+                "response": response
+            }
+            
+            # Read existing logs
+            logs = []
+            if os.path.exists(self.log_file):
+                try:
+                    with open(self.log_file, "r") as f:
+                        logs = json.load(f)
+                except:
+                    pass
+            
+            # Append and write back
+            logs.append(log_entry)
+            # Keep only last 50 logs to avoid file size explosion
+            logs = logs[-50:]
+            
+            with open(self.log_file, "w") as f:
+                json.dump(logs, f, indent=2)
+                
+        except Exception as e:
+            logger.error(f"Failed to log to json: {e}")
 
     def _build_chat_messages(
         self,

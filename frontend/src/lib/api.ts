@@ -46,6 +46,10 @@ export const api = {
   deleteAllSubmissions: () =>
     apiClient.delete('/api/submissions'),
 
+  // HITL
+  resumeSubmission: (id: string, decision: string, feedback?: string) =>
+    apiClient.post(`/api/submissions/${id}/resume`, { action: decision, feedback }),
+
   // PDF Modification
   applyPdfFixes: (id: string) =>
     apiClient.post(`/api/submissions/${id}/apply-fixes`),
@@ -58,6 +62,9 @@ export const api = {
   // Compliance
   getComplianceResults: (submissionId: string) =>
     apiClient.get(`/api/compliance/${submissionId}`),
+
+  getInterimResults: (submissionId: string) =>
+    apiClient.get(`/api/compliance/${submissionId}/interim-results`),
 
   getViolations: (submissionId: string) =>
     apiClient.get(`/api/compliance/${submissionId}/violations`),

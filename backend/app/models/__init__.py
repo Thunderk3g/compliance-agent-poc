@@ -8,5 +8,12 @@ from .content_chunk import ContentChunk
 from .user_config import UserConfig
 from .project import Project
 from .guideline import Guideline
+from .agent_execution import AgentExecution
+from .agent_trace import AgentTrace
+from .tool_invocation import ToolInvocation
 
-__all__ = ["User", "Submission", "ComplianceCheck", "Violation", "Rule", "DeepAnalysis", "ContentChunk", "UserConfig", "Project", "Guideline"]
+__all__ = [
+    "User", "Submission", "ComplianceCheck", "Violation", "Rule", 
+    "DeepAnalysis", "ContentChunk", "UserConfig", "Project", "Guideline",
+    "AgentExecution", "AgentTrace", "ToolInvocation"
+]
