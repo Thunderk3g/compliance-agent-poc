@@ -40,6 +40,26 @@ class AgentState(TypedDict):
 
 # --- Nodes ---
 
+# --- Context Management ---
+import contextvars
+
+class GraphContext:
+    _db_session: contextvars.ContextVar[Optional[Any]] = contextvars.ContextVar("db_session", default=None)
+
+    @classmethod
+    def set_db_session(cls, session: Any):
+        return cls._db_session.set(session)
+
+    @classmethod
+    def get_db_session(cls) -> Optional[Any]:
+        return cls._db_session.get()
+        
+    @classmethod
+    def reset_db_session(cls, token):
+        cls._db_session.reset(token)
+
+# --- Nodes ---
+
 async def node_compliance_analyst(state: AgentState):
     """
     Compliance Analyst: Prepares the analysis, identifies active regulations/rules.
@@ -53,9 +73,11 @@ async def node_compliance_specialist(state: AgentState):
     """
     logger.info("Node: Compliance Specialist running...")
     
-    db = state.get("metadata", {}).get("db_session")
+    # helper to get db from context
+    db = GraphContext.get_db_session()
+    
     if not db:
-        logger.error("DB Session not found in state metadata!")
+        logger.error("DB Session not found in GraphContext!")
         return {"messages": [AIMessage(content="Error: DB Session missing.")]}
         
     chunks_data = state.get("chunks", [])
@@ -144,7 +166,6 @@ async def node_compliance_specialist(state: AgentState):
         "messages": [AIMessage(content=f"Compliance Specialist: Found {len(new_violations)} violations.")]
     }
 
-
 async def node_enterprise_architect(state: AgentState):
     """
     Enterprise Architect: Validates technical controls and finalizes structural decisions.
@@ -152,7 +173,7 @@ async def node_enterprise_architect(state: AgentState):
     """
     logger.info("Node: Enterprise Architect running...")
     
-    db = state.get("metadata", {}).get("db_session")
+    db = GraphContext.get_db_session()
     violations = state.get("violations", [])
     
     from ...services.scoring_service import scoring_service

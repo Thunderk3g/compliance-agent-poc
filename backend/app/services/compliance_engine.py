@@ -73,16 +73,21 @@ class ComplianceEngine:
                 "scores": {},
                 "status": "running",
                 "messages": [],
-                "metadata": {"db_session": db} # Phase 1: Pass DB session via metadata
+                "metadata": {} 
             }
             
             logger.info(f"Starting LangGraph analysis for {submission_id} with {len(chunks)} chunks")
 
             # 2. Invoke LangGraph
             # Import here to avoid top-level circular dependency if any
-            from .agents.orchestration import compliance_graph
+            from .agents.orchestration import compliance_graph, GraphContext
             
-            final_state_dict = await compliance_graph.ainvoke(initial_state)
+            # Set Context
+            token = GraphContext.set_db_session(db)
+            try:
+                final_state_dict = await compliance_graph.ainvoke(initial_state)
+            finally:
+                GraphContext.reset_db_session(token)
             
             logger.info("LangGraph execution completed.")
 
