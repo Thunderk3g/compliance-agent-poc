@@ -11,8 +11,10 @@ from ...services.compliance_engine import compliance_engine
 from ...schemas.submission import (
     SubmissionCreate,
     SubmissionResponse,
-    SubmissionAnalyzeResponse
+    SubmissionAnalyzeResponse,
+    SubmissionResumeRequest
 )
+from ...services.hitl_service import hitl_service
 from ...config import settings
 
 router = APIRouter(prefix="/api/submissions", tags=["submissions"])
@@ -172,6 +174,29 @@ async def analyze_submission(
 
     except Exception as e:
         raise HTTPException(500, f"Analysis failed: {str(e)}")
+
+
+@router.post("/{submission_id}/resume")
+async def resume_submission(
+    submission_id: uuid.UUID,
+    body: SubmissionResumeRequest,
+    db: Session = Depends(get_db)
+):
+    """
+    Resume a suspended compliance analysis (HITL).
+    """
+    try:
+        result = await hitl_service.resume_submission(
+            submission_id=str(submission_id),
+            feedback=body.feedback,
+            action=body.action,
+            db=db
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+    except Exception as e:
+        raise HTTPException(500, f"Resume failed: {str(e)}")
 
 
 @router.delete("/{submission_id}")

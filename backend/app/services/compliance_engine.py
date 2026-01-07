@@ -32,11 +32,12 @@ class ComplianceEngine:
     # COMPLIANCE_PROMPT_TEMPLATE = ...
 
     @staticmethod
-    async def analyze_submission(submission_id: str, db: Session) -> ComplianceCheck:
+    async def analyze_submission(submission_id: str, db: Session) -> Optional[ComplianceCheck]:
         """
-        Entry point for compliance analysis (Refactored to use LangGraph).
+        Entry point for compliance analysis (Refactored to use LangGraph with HITL).
         Orchestrates the flow via 'compliance_graph'.
         """
+        submission = None
         try:
             # 1. Initialize State & Data
             submission = db.query(Submission).filter(Submission.id == submission_id).first()
@@ -48,12 +49,25 @@ class ComplianceEngine:
             db.commit()
 
             # Load Rules & Content
-            rules = ComplianceEngine._load_active_rules(db, submission.project_id)
+            rules_orm = ComplianceEngine._load_active_rules(db, submission.project_id)
+            
+            # Serialize rules for State (LangGraph persistence needs serializable objects)
+            rules_serializable = {}
+            for cat, r_list in rules_orm.items():
+                rules_serializable[cat] = [
+                    {
+                        "id": str(r.id),
+                        "rule_text": r.rule_text,
+                        "category": r.category,
+                        "severity": r.severity,
+                        "conditions": r.pattern # Mapping pattern to conditions, or keep empty if unused
+                    } for r in r_list
+                ]
+
             content_service = ContentRetrievalService(db)
             chunks = content_service.get_analyzable_content(submission_id)
             
             # Prepare Input for LangGraph
-            # We serialize chunks to dicts to match AgentState schema
             chunks_data = [
                 {
                     "id": str(c.id), 
@@ -68,7 +82,7 @@ class ComplianceEngine:
                 "submission_id": str(submission_id),
                 "project_id": str(submission.project_id) if submission.project_id else None,
                 "chunks": chunks_data,
-                "active_rules": rules,
+                "active_rules": rules_serializable,
                 "violations": [],
                 "scores": {},
                 "status": "running",
@@ -84,32 +98,48 @@ class ComplianceEngine:
             
             # Set Context
             token = GraphContext.set_db_session(db)
+            
+            # Config for persistence
+            config = {"configurable": {"thread_id": str(submission_id)}}
+            
             try:
-                final_state_dict = await compliance_graph.ainvoke(initial_state)
+                # Use stream or ainvoke. If we use interrupt_before, ainvoke might return just until the interrupt.
+                # But ainvoke returns the final state *reached*. 
+                # If interrupted, it stops.
+                
+                final_state_dict = await compliance_graph.ainvoke(initial_state, config=config)
+                
+                # Check snapshot to see if we are done or interrupted
+                snapshot = compliance_graph.get_state(config)
+                
+                if snapshot.next:
+                    # If there are next steps, we are paused/interrupted
+                    logger.info(f"LangGraph execution PAUSED at {snapshot.next} for {submission_id}")
+                    submission.status = "waiting_for_review"
+                    db.commit()
+                    return None # Return None or partial result? For now None as check isn't complete.
+                else:
+                     logger.info("LangGraph execution COMPLETED.")
+            
             finally:
                 GraphContext.reset_db_session(token)
             
-            logger.info("LangGraph execution completed.")
 
-            # 3. Persist Results (Map back to legacy ComplianceState for compatibility)
-            # We reuse the existing persist_results method which expects ComplianceState object
+            # 3. Persist Results (If completed)
             legacy_state = ComplianceState.construct(
                 submission_id=final_state_dict["submission_id"],
-                project_id=final_state_dict["project_id"],
+                project_id=final_state_dict.get("project_id"), # Use .get()
                 current_step="completed",
                 status="completed",
                 violations=final_state_dict["violations"],
                 scores=final_state_dict["scores"],
                 total_chunks=len(chunks),
-                chunks=chunks, # Optional, if needed
+                chunks=chunks,
                 metadata={
                     "assessments": [m.content for m in final_state_dict.get("messages", []) if hasattr(m, 'content')],
                     "graph_snapshot": "final"
                 }
             )
-            # Manually set fields if construct doesn't handle defaults/validators same way, 
-            # but usually Pydantic construct is fast. 
-            # ComplianceState is Pydantic BaseModel.
             
             # Persist
             compliance_check = ComplianceEngine.persist_results(legacy_state, db)
@@ -120,11 +150,145 @@ class ComplianceEngine:
             traceback.print_exc()
             logger.error(f"Error analyzing submission: {str(e)}")
             db.rollback()
-            if submission:
-                submission.status = "failed"
-                db.add(submission)
-                db.commit()
+            # Re-fetch submission in case rollback detached it
+            if submission_id:
+                sub = db.query(Submission).filter(Submission.id == submission_id).first()
+                if sub:
+                    sub.status = "failed"
+                    db.add(sub)
+                    db.commit()
             raise
+
+    @staticmethod
+    async def resume_submission(submission_id: str, formatted_feedback: str, db: Session) -> Optional[ComplianceCheck]:
+        """
+        Resumes a paused compliance check (HITL).
+        """
+        try:
+             # 1. Setup
+            submission = db.query(Submission).filter(Submission.id == submission_id).first()
+            if not submission:
+                raise ValueError("Submission not found")
+                
+            from .agents.orchestration import compliance_graph, GraphContext
+            
+            # Set Context
+            token = GraphContext.set_db_session(db)
+            config = {"configurable": {"thread_id": str(submission_id)}}
+            
+            try:
+                # Update state with feedback
+                # "human_review" node will read "user_feedback"
+                update_dict = {"user_feedback": formatted_feedback}
+                compliance_graph.update_state(config, update_dict)
+                
+                # Resume (call invoke with None input to proceed from current state)
+                final_state_dict = await compliance_graph.ainvoke(None, config=config)
+                
+                 # Check snapshot
+                snapshot = compliance_graph.get_state(config)
+                if snapshot.next:
+                     logger.info(f"LangGraph execution PAUSED again at {snapshot.next}")
+                     return None
+                
+            finally:
+                 GraphContext.reset_db_session(token)
+                 
+            # 2. Persist Results (Copied from analyze_submission - refactor candidate)
+            # Fetch chunks again for constructing legacy state if needed, or reconstruct minimal
+            # For persist_results, we use chunks mainly for metadata or just len.
+            # Let's get chunks count from existing data if possible, or query.
+            # State violations are full content so chunks not strictly needed for legacy object creation 
+            # except for the loops in persists (which iterates state.violations).
+            
+            legacy_state = ComplianceState.construct(
+                submission_id=final_state_dict["submission_id"],
+                project_id=final_state_dict.get("project_id"),
+                current_step="completed",
+                status="completed",
+                violations=final_state_dict["violations"],
+                scores=final_state_dict["scores"],
+                total_chunks=0, # Placeholder, not critical for persist_results
+                chunks=[], 
+                metadata={
+                    "assessments": [m.content for m in final_state_dict.get("messages", []) if hasattr(m, 'content')],
+                    "graph_snapshot": "final"
+                }
+            )
+            
+            compliance_check = ComplianceEngine.persist_results(legacy_state, db)
+            return compliance_check
+            
+        except Exception as e:
+            logger.error(f"Error resuming submission: {str(e)}")
+            # Handle status updates if needed
+            raise
+
+    @staticmethod
+    async def get_interim_results(submission_id: str, db: Session) -> Optional[Dict[str, Any]]:
+        """
+        Retrieves the current state of a paused submission (HITL), calculating projected scores.
+        Returns a dict structure matching ComplianceCheckResponse.
+        """
+        try:
+            from .agents.orchestration import compliance_graph
+            
+            config = {"configurable": {"thread_id": str(submission_id)}}
+            snapshot = compliance_graph.get_state(config)
+            
+            if not snapshot.values:
+                return None
+                
+            state = snapshot.values
+            violations = state.get("violations", [])
+            
+            # Calculate scores dynamically for preview since Enterprise Architect hasn't run yet
+            scores = scoring_service.calculate_scores(violations, db=db)
+            
+            # Construct response dict (mimicking ComplianceCheckResponse)
+            # We don't have a check ID yet, so we generate a placeholder or use validation to skip
+            
+            # Needed for Pydantic validation of ViolationResponse nested objects
+            # ViolationResponse expects fields like check_id, which we don't have.
+            # We might need to handle this at the schema level or mock it.
+            # Or the frontend doesn't care about ID if we just display it.
+            
+            # Map violations to match expected schema of ViolationResponse
+            # Schema: id, rule_id, severity, category, description, location, current_text, suggested_fix
+            
+            formatted_violations = []
+            for v in violations:
+                formatted_violations.append({
+                    "id": uuid.uuid4(), # Temporary ID
+                    "check_id": uuid.uuid4(), # Temporary ID
+                    "rule_id": uuid.uuid4() if not v.get("rule_id") else v.get("rule_id"), # Handle missing rule_id
+                    "severity": v.get("severity", "medium"),
+                    "category": v.get("category", "general"),
+                    "description": v.get("description", "No description"),
+                    "location": v.get("location", ""),
+                    "current_text": v.get("current_text", ""),
+                    "suggested_fix": v.get("suggested_fix", ""),
+                    "is_auto_fixable": v.get("auto_fixable", False)
+                })
+
+            return {
+                "id": uuid.uuid4(), # Temporary ID
+                "submission_id": uuid.UUID(submission_id),
+                "overall_score": scores.get("overall", 0),
+                "irdai_score": scores.get("irdai", 0),
+                "brand_score": scores.get("brand", 0),
+                "seo_score": scores.get("seo", 0),
+                "status": "waiting_for_review",
+                "grade": scores.get("grade", "F"),
+                "ai_summary": "Analysis paused for human review.",
+                "check_date": datetime.now(),
+                "has_deep_analysis": False,
+                "violations": formatted_violations
+            }
+            
+        except Exception as e:
+            logger.error(f"Error fetching interim results: {str(e)}")
+            return None
 
     @staticmethod
     def initialize_state(submission_id: str, project_id: Optional[str]) -> ComplianceState:

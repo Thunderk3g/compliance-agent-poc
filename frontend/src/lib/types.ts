@@ -4,7 +4,7 @@ export interface Submission {
   content_type: 'html' | 'markdown' | 'pdf' | 'docx';
   // Updated for chunked workflow: uploaded → preprocessing → preprocessed → analyzing → analyzed
   // Legacy statuses: pending, completed, failed still supported
-  status: 'pending' | 'uploaded' | 'preprocessing' | 'preprocessed' | 'analyzing' | 'analyzed' | 'completed' | 'failed';
+  status: 'pending' | 'uploaded' | 'preprocessing' | 'preprocessed' | 'analyzing' | 'analyzed' | 'completed' | 'failed' | 'waiting_for_review';
   submitted_at: string;
   submitted_by?: string;
   has_deep_analysis?: boolean;
@@ -17,7 +17,7 @@ export interface ComplianceCheck {
   irdai_score: number;
   brand_score: number;
   seo_score: number;
-  status: 'passed' | 'flagged' | 'failed';
+  status: 'passed' | 'flagged' | 'failed' | 'waiting_for_review';
   grade: string;
   ai_summary: string;
   check_date: string;

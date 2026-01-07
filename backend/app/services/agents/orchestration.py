@@ -31,7 +31,7 @@ class AgentState(TypedDict):
     scores: Dict[str, Any]
     
     # Metadata & Control
-    active_rules: Dict[str, List[Rule]]
+    active_rules: Dict[str, List[Dict[str, Any]]]
     status: str
     messages: Annotated[List[BaseMessage], operator.add]
     
@@ -191,10 +191,32 @@ async def node_human_review(state: AgentState):
     """
     HITL Node: Waits for human input if critical violations/low confidence.
     """
-    logger.info("Node: Human Review (Placeholder).")
+    logger.info("Node: Human Review invoked.")
+    
+    # We check if feedback is present. If so, it means we've resumed.
+    # In a real scenario, we might pause based on some condition here and return a Command(interrupt=True)
+    # But since we are using interrupt_before via compile(), the graph STOPS before this node runs initially (if we set it so),
+    # OR we pause *after* a previous node.
+    # Actually, interrupt_before=["node_human_review"] means it stops *before* entering this node.
+    # When resumed, it enters this node.
+    
+    user_feedback = state.get("user_feedback")
+    if user_feedback:
+        logger.info(f"Human Review: User provided feedback: {user_feedback}")
+        return {
+            "messages": [AIMessage(content=f"Human Review: Reviewed with feedback: {user_feedback}")],
+            "status": "reviewed"
+        }
+    
+    logger.info("Human Review: No feedback yet, proceeding (or was just resumed without data mutation).")
     return {"status": "reviewed"}
 
 # --- Graph Contruction ---
+
+from langgraph.checkpoint.memory import MemorySaver
+
+# Global MemorySaver (In-Memory Persistence for DEV)
+memory_saver = MemorySaver()
 
 def build_compliance_graph():
     """
@@ -205,18 +227,22 @@ def build_compliance_graph():
     # Add Nodes
     workflow.add_node("compliance_analyst", node_compliance_analyst)
     workflow.add_node("compliance_specialist", node_compliance_specialist)
+    workflow.add_node("human_review", node_human_review)
     workflow.add_node("enterprise_architect", node_enterprise_architect)
-    # workflow.add_node("human_review", node_human_review) # Phase 2
     
     # Add Edges
     workflow.set_entry_point("compliance_analyst")
     
     workflow.add_edge("compliance_analyst", "compliance_specialist")
-    workflow.add_edge("compliance_specialist", "enterprise_architect")
+    workflow.add_edge("compliance_specialist", "human_review")
+    workflow.add_edge("human_review", "enterprise_architect")
     workflow.add_edge("enterprise_architect", END)
     
-    # Compile
-    app = workflow.compile()
+    # Compile with persistence and interrupt
+    app = workflow.compile(
+        checkpointer=memory_saver,
+        interrupt_before=["human_review"]
+    )
     return app
 
 # Singleton / Factory access

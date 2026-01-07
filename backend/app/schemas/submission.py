@@ -30,3 +30,8 @@ class SubmissionAnalyzeRequest(BaseModel):
 class SubmissionAnalyzeResponse(BaseModel):
     message: str
     submission_id: uuid.UUID
+
+
+class SubmissionResumeRequest(BaseModel):
+    action: str
+    feedback: Optional[str] = None

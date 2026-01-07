@@ -25,6 +25,11 @@ class StandardComplianceAgent(ComplianceAgent):
         return self._category
 
     async def analyze(self, content: str, rules: List[Rule], execution_id: str = None, db: Any = None) -> ComplianceAnalysisResult:
+        # Trace: Planning
+        self._record_trace(db, execution_id, "Step 1: Planning", 
+                           thought=f"I need to analyze this content against {len(rules)} rules for {self.category}.",
+                           action="ContextEngineeringService.create_compliance_prompts")
+
         # 1. Build Prompt (Context Engineering)
         # We pass the rules under their specific category header
         rules_dict = {self.category: rules}
@@ -36,6 +41,11 @@ class StandardComplianceAgent(ComplianceAgent):
             "rules_count": len(rules)
         }
         
+        # Trace: Execution
+        self._record_trace(db, execution_id, "Step 2: LLM Call", 
+                           thought="Prompt constructed. Sending to LLM for structured analysis.",
+                           action="llm_service.generate_structured_response")
+
         # 2. Call LLM (Structured Output)
         response = await llm_service.generate_structured_response(
             prompt=prompt,
@@ -46,5 +56,10 @@ class StandardComplianceAgent(ComplianceAgent):
             db=db,
             tool_name=f"{self.name}_analysis"
         )
+        
+        # Trace: Observation
+        self._record_trace(db, execution_id, "Step 3: Result", 
+                           thought="Analysis complete.",
+                           observation=f"Found {len(response.violations)} violations.")
         
         return response
