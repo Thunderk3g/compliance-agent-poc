@@ -1,262 +1,84 @@
+import os
 import logging
-import operator
-from typing import TypedDict, Annotated, List, Dict, Any, Optional
-from uuid import UUID
+from langgraph.graph import StateGraph, END, START
+from redis import Redis
 
-from langgraph.graph import StateGraph, END
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
-
-from ...models.rule import Rule
-from ...schemas.compliance_schemas import ComplianceAnalysisResult
-# from .starting_agent import starting_compliance_agent # Placeholder removed
-from ...services.agents.agent_factory import AgentFactory
-from ...services.llm_service import llm_service
+from .graph.state import ComplianceState
+from .graph.nodes import (
+    preprocess_node,
+    dispatch_node,
+    analysis_node,
+    scoring_node,
+    refinement_node
+)
+from .graph.context import GraphContext
 
 logger = logging.getLogger(__name__)
 
-# --- State Definition ---
-
-class AgentState(TypedDict):
-    """
-    Represents the state of the compliance orchestration graph.
-    """
-    submission_id: str
-    project_id: Optional[str]
-    
-    # Content to analyze
-    chunks: List[Dict[str, Any]] 
-    
-    # Accumulated Results (Reducer pattern: Append-only)
-    violations: Annotated[List[Dict[str, Any]], operator.add]
-    scores: Dict[str, Any]
-    
-    # Metadata & Control
-    active_rules: Dict[str, List[Dict[str, Any]]]
-    status: str
-    messages: Annotated[List[BaseMessage], operator.add]
-    
-    # For HITL
-    user_feedback: Optional[str]
-    user_id: Optional[str]
-
-# --- Nodes ---
-
-# --- Context Management ---
-import contextvars
-
-class GraphContext:
-    _db_session: contextvars.ContextVar[Optional[Any]] = contextvars.ContextVar("db_session", default=None)
-
-    @classmethod
-    def set_db_session(cls, session: Any):
-        return cls._db_session.set(session)
-
-    @classmethod
-    def get_db_session(cls) -> Optional[Any]:
-        return cls._db_session.get()
-        
-    @classmethod
-    def reset_db_session(cls, token):
-        cls._db_session.reset(token)
-
-# --- Nodes ---
-
-async def node_compliance_analyst(state: AgentState):
-    """
-    Compliance Analyst: Prepares the analysis, identifies active regulations/rules.
-    """
-    logger.info("Node: Compliance Analyst running...")
-    return {"messages": [AIMessage(content="Compliance Analyst: Rules ready.")]}
-
-async def node_compliance_specialist(state: AgentState):
-    """
-    Compliance Specialist: The core engine that runs individual compliance checks.
-    """
-    logger.info("Node: Compliance Specialist running...")
-    
-    # helper to get db from context
-    db = GraphContext.get_db_session()
-    
-    if not db:
-        logger.error("DB Session not found in GraphContext!")
-        return {"messages": [AIMessage(content="Error: DB Session missing.")]}
-        
-    chunks_data = state.get("chunks", [])
-    rules = state.get("active_rules", {})
-    submission_id = state.get("submission_id")
-    
-    # Initialize Context Service
-    from ...services.preprocessing_service import ContextEngineeringService
-    context_service = ContextEngineeringService(db)
-    
-    active_categories = [cat for cat, r_list in rules.items() if r_list]
-    new_violations = []
-    
-    import datetime
-    from ...models.agent_execution import AgentExecution
-    from ...services.agents.agent_factory import AgentFactory
-    
-    for chunk_data in chunks_data:
-        chunk_text = chunk_data.get("text", "")
-        chunk_index = chunk_data.get("chunk_index", 0)
-        chunk_id = chunk_data.get("id")
-        
-        # Iterate through categories and spawn agents
-        for category in active_categories:
-            category_rules = rules[category]
-            
-            # Spawn Agent
-            agent = AgentFactory.create_agent(category, context_service)
-            
-            # Create Execution Record
-            # UUID conversion if needed
-            try:
-                sub_uuid = UUID(submission_id)
-                proj_uuid = UUID(state.get("project_id")) if state.get("project_id") else None
-                user_uuid = UUID(state.get("user_id")) if state.get("user_id") else None
-            except:
-                sub_uuid = None
-                proj_uuid = None
-                user_uuid = None
-
-            execution = AgentExecution(
-                agent_type=category,
-                session_id=sub_uuid, 
-                project_id=proj_uuid,
-                user_id=user_uuid,
-                status="running",
-                input_data={"chunk_index": chunk_index, "text_preview": chunk_text[:100]}
-            )
-            db.add(execution)
-            db.commit() 
-            
-            try:
-                # Agent Analysis
-                start_time = datetime.datetime.now()
-                analysis_result = await agent.analyze(
-                    content=chunk_text, 
-                    rules=category_rules,
-                    execution_id=str(execution.id),
-                    db=db
-                )
-                end_time = datetime.datetime.now()
-                
-                # Update Execution Success
-                execution.status = "completed"
-                execution.output_data = analysis_result.model_dump(mode='json')
-                execution.completed_at = end_time
-                execution.execution_time_ms = int((end_time - start_time).total_seconds() * 1000)
-                
-                # Aggregate tokens from tool invocations
-                from ...models.tool_invocation import ToolInvocation
-                tool_invocations = db.query(ToolInvocation).filter(ToolInvocation.execution_id == execution.id).all()
-                execution.total_tokens_used = sum(inv.tokens_used for inv in tool_invocations)
-                
-                db.commit()
-
-                # Accumulate Results
-                for v in analysis_result.violations:
-                    enriched_v = v.model_dump()
-                    enriched_v["chunk_id"] = str(chunk_id)
-                    enriched_v["chunk_index"] = chunk_index
-                    
-                    # Build location string
-                    loc = f"chunk:{chunk_id}"
-                    enriched_v["location"] = loc
-                    
-                    new_violations.append(enriched_v)
-            
-            except Exception as e:
-                logger.error(f"Agent {category} execution failed: {e}")
-                execution.status = "failed"
-                execution.output_data = {"error": str(e)}
-                execution.completed_at = datetime.datetime.now()
-                db.commit()
-
-    logger.info(f"Compliance Specialist found {len(new_violations)} violations.")
-    return {
-        "violations": new_violations,
-        "messages": [AIMessage(content=f"Compliance Specialist: Found {len(new_violations)} violations.")]
-    }
-
-async def node_enterprise_architect(state: AgentState):
-    """
-    Enterprise Architect: Validates technical controls and finalizes structural decisions.
-    Acts as the 'Scoring' and 'Finalizing' step for Phase 1.
-    """
-    logger.info("Node: Enterprise Architect running...")
-    
-    db = GraphContext.get_db_session()
-    violations = state.get("violations", [])
-    
-    from ...services.scoring_service import scoring_service
-    
-    # Calculate Scores
-    scores = scoring_service.calculate_scores(violations, db=db)
-    logger.info(f"Scoring complete: {scores.get('overall', 0)}")
-    
-    return {
-        "scores": scores,
-        "messages": [AIMessage(content=f"Enterprise Architect: Validation & Scoring complete. Grade: {scores.get('grade')}")]
-    }
-
-async def node_human_review(state: AgentState):
-    """
-    HITL Node: Waits for human input if critical violations/low confidence.
-    """
-    logger.info("Node: Human Review invoked.")
-    
-    # We check if feedback is present. If so, it means we've resumed.
-    # In a real scenario, we might pause based on some condition here and return a Command(interrupt=True)
-    # But since we are using interrupt_before via compile(), the graph STOPS before this node runs initially (if we set it so),
-    # OR we pause *after* a previous node.
-    # Actually, interrupt_before=["node_human_review"] means it stops *before* entering this node.
-    # When resumed, it enters this node.
-    
-    user_feedback = state.get("user_feedback")
-    if user_feedback:
-        logger.info(f"Human Review: User provided feedback: {user_feedback}")
-        return {
-            "messages": [AIMessage(content=f"Human Review: Reviewed with feedback: {user_feedback}")],
-            "status": "reviewed"
-        }
-    
-    logger.info("Human Review: No feedback yet, proceeding (or was just resumed without data mutation).")
-    return {"status": "reviewed"}
-
-# --- Graph Contruction ---
-
-from langgraph.checkpoint.memory import MemorySaver
-
-# Global MemorySaver (In-Memory Persistence for DEV)
-memory_saver = MemorySaver()
+# Redis Configuration
+REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379")
 
 def build_compliance_graph():
     """
-    Builds the LangGraph for Compliance Orchestration.
+    Constructs the Compliance Agent StateGraph.
     """
-    workflow = StateGraph(AgentState)
+    workflow = StateGraph(ComplianceState)
+
+    # 1. Add Nodes
+    workflow.add_node("preprocess_node", preprocess_node)
+    workflow.add_node("dispatch_node", dispatch_node)
+    workflow.add_node("analysis_node", analysis_node)
+    workflow.add_node("scoring_node", scoring_node)
+    workflow.add_node("refinement_node", refinement_node)
+
+    # 2. Define Edges
+    workflow.add_edge(START, "preprocess_node")
+    workflow.add_edge("preprocess_node", "dispatch_node")
     
-    # Add Nodes
-    workflow.add_node("compliance_analyst", node_compliance_analyst)
-    workflow.add_node("compliance_specialist", node_compliance_specialist)
-    workflow.add_node("human_review", node_human_review)
-    workflow.add_node("enterprise_architect", node_enterprise_architect)
+    # Conditional logic could be added here, but for now we flow linearly to analysis
+    # logic is inside the nodes to handle empty/skipping if needed
+    workflow.add_edge("dispatch_node", "analysis_node")
     
-    # Add Edges
-    workflow.set_entry_point("compliance_analyst")
-    
-    workflow.add_edge("compliance_analyst", "compliance_specialist")
-    workflow.add_edge("compliance_specialist", "human_review")
-    workflow.add_edge("human_review", "enterprise_architect")
-    workflow.add_edge("enterprise_architect", END)
-    
-    # Compile with persistence and interrupt
+    workflow.add_edge("analysis_node", "scoring_node")
+    workflow.add_edge("scoring_node", "refinement_node")
+    workflow.add_edge("refinement_node", END)
+
+    # 3. Configure Persistence
+    try:
+        # Using synchronous Redis client for the Checkpointer
+        # LangGraph RedisSaver works with a Redis connection object
+        from langgraph.checkpoint.redis import RedisSaver
+        
+        # We need to ensure we use the right client based on the library version
+        # Assuming langgraph-checkpoint-redis 2.0+
+        conn = Redis.from_url(REDIS_URL)
+        checkpointer = RedisSaver(redis_client=conn)
+        logger.info(f"Using Redis persistence at {REDIS_URL}")
+        
+    except ImportError:
+        logger.warning("langgraph-checkpoint-redis not installed. Falling back to MemorySaver.")
+        from langgraph.checkpoint.memory import MemorySaver
+        checkpointer = MemorySaver()
+    except Exception as e:
+        logger.warning(f"Failed to connect to Redis: {e}. Falling back to MemorySaver.")
+        from langgraph.checkpoint.memory import MemorySaver
+        checkpointer = MemorySaver()
+
+    # 4. Compile Graph
     app = workflow.compile(
-        checkpointer=memory_saver,
-        interrupt_before=["human_review"]
+        checkpointer=checkpointer,
+        interrupt_before=["refinement_node"]
     )
+    
     return app
 
-# Singleton / Factory access
+# Initialize Graph
 compliance_graph = build_compliance_graph()
+
+# Helper to visualize
+def get_mermaid_png():
+    try:
+        return compliance_graph.get_graph().draw_mermaid_png()
+    except Exception as e:
+        logger.warning(f"Visualizer failed: {e}")
+        return None

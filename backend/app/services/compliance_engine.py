@@ -34,7 +34,7 @@ class ComplianceEngine:
     @staticmethod
     async def analyze_submission(submission_id: str, db: Session) -> Optional[ComplianceCheck]:
         """
-        Entry point for compliance analysis (Refactored to use LangGraph with HITL).
+        Entry point for compliance analysis using LangGraph.
         Orchestrates the flow via 'compliance_graph'.
         """
         submission = None
@@ -48,42 +48,19 @@ class ComplianceEngine:
             submission.status = "analyzing"
             db.commit()
 
-            # Load Rules & Content
-            rules_orm = ComplianceEngine._load_active_rules(db, submission.project_id)
+            # Initialize Graph Context
+            from .agents.orchestration import compliance_graph, GraphContext
             
-            # Serialize rules for State (LangGraph persistence needs serializable objects)
-            rules_serializable = {}
-            for cat, r_list in rules_orm.items():
-                rules_serializable[cat] = [
-                    {
-                        "id": str(r.id),
-                        "rule_text": r.rule_text,
-                        "category": r.category,
-                        "severity": r.severity,
-                        "conditions": r.pattern # Mapping pattern to conditions, or keep empty if unused
-                    } for r in r_list
-                ]
-
-            content_service = ContentRetrievalService(db)
-            chunks = content_service.get_analyzable_content(submission_id)
+            # Set Context for DB Session
+            token = GraphContext.set_db_session(db)
             
-            # Prepare Input for LangGraph
-            chunks_data = [
-                {
-                    "id": str(c.id), 
-                    "text": c.text, 
-                    "chunk_index": c.chunk_index,
-                    "metadata": c.metadata
-                } 
-                for c in chunks
-            ]
-            
+            # Initial State
             initial_state = {
                 "submission_id": str(submission_id),
                 "project_id": str(submission.project_id) if submission.project_id else None,
                 "user_id": str(submission.submitted_by) if submission.submitted_by else None,
-                "chunks": chunks_data,
-                "active_rules": rules_serializable,
+                "chunks": [], # Will be loaded by preprocess_node
+                "active_rules": {}, # Will be loaded by dispatch_node
                 "violations": [],
                 "scores": {},
                 "status": "running",
@@ -91,67 +68,53 @@ class ComplianceEngine:
                 "metadata": {} 
             }
             
-            logger.info(f"Starting LangGraph analysis for {submission_id} with {len(chunks)} chunks")
-
-            # 2. Invoke LangGraph
-            # Import here to avoid top-level circular dependency if any
-            from .agents.orchestration import compliance_graph, GraphContext
-            
-            # Set Context
-            token = GraphContext.set_db_session(db)
-            
             # Config for persistence
             config = {"configurable": {"thread_id": str(submission_id)}}
             
             try:
-                # Use stream or ainvoke. If we use interrupt_before, ainvoke might return just until the interrupt.
-                # But ainvoke returns the final state *reached*. 
-                # If interrupted, it stops.
+                logger.info(f"Starting LangGraph analysis for {submission_id}")
                 
-                final_state_dict = await compliance_graph.ainvoke(initial_state, config=config)
+                # Invoke Graph
+                # We use ainvoke to run async
+                final_state = await compliance_graph.ainvoke(initial_state, config=config)
                 
-                # Check snapshot to see if we are done or interrupted
+                # Check for interruption (HITL)
                 snapshot = compliance_graph.get_state(config)
-                
                 if snapshot.next:
-                    # If there are next steps, we are paused/interrupted
                     logger.info(f"LangGraph execution PAUSED at {snapshot.next} for {submission_id}")
                     submission.status = "waiting_for_review"
                     db.commit()
-                    return None # Return None or partial result? For now None as check isn't complete.
-                else:
-                     logger.info("LangGraph execution COMPLETED.")
-            
+                    return None
+                    
+                # If completed, persist final results
+                logger.info("LangGraph execution COMPLETED.")
+                
+                # Persist Results
+                legacy_state = ComplianceState.construct(
+                    submission_id=final_state["submission_id"],
+                    project_id=final_state.get("project_id"),
+                    current_step="completed",
+                    status="completed",
+                    violations=final_state["violations"],
+                    scores=final_state["scores"],
+                    total_chunks=len(final_state.get("chunks", [])),
+                    chunks=[], # Not needed for persist_results
+                    metadata={
+                        "assessments": [m.content for m in final_state.get("messages", []) if hasattr(m, 'content')],
+                        "graph_snapshot": "final"
+                    }
+                )
+                
+                compliance_check = ComplianceEngine.persist_results(legacy_state, db)
+                return compliance_check
+                
             finally:
                 GraphContext.reset_db_session(token)
-            
-
-            # 3. Persist Results (If completed)
-            legacy_state = ComplianceState.construct(
-                submission_id=final_state_dict["submission_id"],
-                project_id=final_state_dict.get("project_id"), # Use .get()
-                current_step="completed",
-                status="completed",
-                violations=final_state_dict["violations"],
-                scores=final_state_dict["scores"],
-                total_chunks=len(chunks),
-                chunks=chunks,
-                metadata={
-                    "assessments": [m.content for m in final_state_dict.get("messages", []) if hasattr(m, 'content')],
-                    "graph_snapshot": "final"
-                }
-            )
-            
-            # Persist
-            compliance_check = ComplianceEngine.persist_results(legacy_state, db)
-            
-            return compliance_check
 
         except Exception as e:
             traceback.print_exc()
             logger.error(f"Error analyzing submission: {str(e)}")
             db.rollback()
-            # Re-fetch submission in case rollback detached it
             if submission_id:
                 sub = db.query(Submission).filter(Submission.id == submission_id).first()
                 if sub:
@@ -163,10 +126,10 @@ class ComplianceEngine:
     @staticmethod
     async def resume_submission(submission_id: str, formatted_feedback: str, db: Session) -> Optional[ComplianceCheck]:
         """
-        Resumes a paused compliance check (HITL).
+        Resumes a paused compliance check (HITL) by providing feedback.
         """
         try:
-             # 1. Setup
+            # 1. Setup
             submission = db.query(Submission).filter(Submission.id == submission_id).first()
             if not submission:
                 raise ValueError("Submission not found")
@@ -179,50 +142,44 @@ class ComplianceEngine:
             
             try:
                 # Update state with feedback
-                # "human_review" node will read "user_feedback"
                 update_dict = {"user_feedback": formatted_feedback}
                 compliance_graph.update_state(config, update_dict)
                 
-                # Resume (call invoke with None input to proceed from current state)
-                final_state_dict = await compliance_graph.ainvoke(None, config=config)
+                logger.info(f"Resuming LangGraph for {submission_id} with feedback")
                 
-                 # Check snapshot
+                # Resume (call invoke with None input to proceed from current state)
+                final_state = await compliance_graph.ainvoke(None, config=config)
+                
+                # Check snapshot
                 snapshot = compliance_graph.get_state(config)
                 if snapshot.next:
                      logger.info(f"LangGraph execution PAUSED again at {snapshot.next}")
                      return None
                 
+                # If completed, persist results
+                legacy_state = ComplianceState.construct(
+                    submission_id=final_state["submission_id"],
+                    project_id=final_state.get("project_id"),
+                    current_step="completed",
+                    status="completed",
+                    violations=final_state["violations"],
+                    scores=final_state["scores"],
+                    total_chunks=len(final_state.get("chunks", [])),
+                    chunks=[], 
+                    metadata={
+                        "assessments": [m.content for m in final_state.get("messages", []) if hasattr(m, 'content')],
+                        "graph_snapshot": "final"
+                    }
+                )
+                
+                compliance_check = ComplianceEngine.persist_results(legacy_state, db)
+                return compliance_check
+                
             finally:
                  GraphContext.reset_db_session(token)
-                 
-            # 2. Persist Results (Copied from analyze_submission - refactor candidate)
-            # Fetch chunks again for constructing legacy state if needed, or reconstruct minimal
-            # For persist_results, we use chunks mainly for metadata or just len.
-            # Let's get chunks count from existing data if possible, or query.
-            # State violations are full content so chunks not strictly needed for legacy object creation 
-            # except for the loops in persists (which iterates state.violations).
-            
-            legacy_state = ComplianceState.construct(
-                submission_id=final_state_dict["submission_id"],
-                project_id=final_state_dict.get("project_id"),
-                current_step="completed",
-                status="completed",
-                violations=final_state_dict["violations"],
-                scores=final_state_dict["scores"],
-                total_chunks=0, # Placeholder, not critical for persist_results
-                chunks=[], 
-                metadata={
-                    "assessments": [m.content for m in final_state_dict.get("messages", []) if hasattr(m, 'content')],
-                    "graph_snapshot": "final"
-                }
-            )
-            
-            compliance_check = ComplianceEngine.persist_results(legacy_state, db)
-            return compliance_check
-            
+
         except Exception as e:
             logger.error(f"Error resuming submission: {str(e)}")
-            # Handle status updates if needed
             raise
 
     @staticmethod

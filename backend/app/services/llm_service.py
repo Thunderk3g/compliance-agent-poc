@@ -112,12 +112,37 @@ class LLMService:
         
         for attempt in range(max_retries):
             try:
-                response = await self.client.chat.completions.create(
+                # Use with_raw_response to access the full unmapped payload (crucial for Gemini's usageMetadata)
+                response_wrapper = await self.client.chat.completions.with_raw_response.create(
                     model=self.model,
                     messages=current_messages,
                     temperature=0.2, # Lower temperature for structured output
                     response_format={"type": "json_object"} 
                 )
+                
+                # Parse the standard ChatCompletion object
+                response = response_wrapper.parse()
+                
+                # Extract token usage from the raw generic response
+                token_usage = 0
+                try:
+                    # Get raw JSON dict
+                    import json # Ensure json is available inside scope if needed, though it's imported at top
+                    raw_data = json.loads(response_wrapper.http_response.text)
+                    
+                    if "usageMetadata" in raw_data:
+                        token_usage = raw_data["usageMetadata"].get("totalTokenCount", 0)
+                    elif hasattr(response, 'usage') and response.usage:
+                        token_usage = response.usage.total_tokens
+                    else:
+                        # Fallback estimate
+                        response_text_len = len(response.choices[0].message.content.strip())
+                        token_usage = (len(prompt) + response_text_len) // 4
+                except Exception as e:
+                    logger.warning(f"Failed to extract token usage from raw response: {e}")
+                    # Final fallback
+                    token_usage = 0
+
                 response_text = response.choices[0].message.content.strip()
                 
                 # Log interaction
@@ -141,20 +166,6 @@ class LLMService:
                 
                 # Record metrics if execution_id is provided
                 if execution_id and db:
-                     # Get token usage from response if available
-                     token_usage = 0
-                     if hasattr(response, 'usage') and response.usage:
-                         token_usage = response.usage.total_tokens
-                     # Fallback to checking model_extra/usageMetadata for raw Gemini responses if usage is missing
-                     elif hasattr(response, 'model_extra') and response.model_extra and 'usageMetadata' in response.model_extra:
-                         token_usage = response.model_extra['usageMetadata'].get('totalTokenCount', 0)
-                     # Fallback to checking dict-access if response allows it and usageMetadata is at top level
-                     elif hasattr(response, 'get') and response.get('usageMetadata'):
-                          token_usage = response.get('usageMetadata').get('totalTokenCount', 0)
-                     else:
-                         # Fallback estimate (chars / 4)
-                         token_usage = (len(prompt) + len(response_text)) // 4
-
                      await self._record_tool_invocation(
                         db=db,
                         execution_id=execution_id,
