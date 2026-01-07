@@ -28,6 +28,15 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("⚠️ LLM service is not available - using fallback responses")
 
+    # Initialize Redis Checkpointer (creates indices)
+    try:
+        from .services.agents.orchestration import compliance_graph
+        if compliance_graph.checkpointer and hasattr(compliance_graph.checkpointer, "setup"):
+            await compliance_graph.checkpointer.setup()
+            logger.info("✅ Redis checkpointing initialized")
+    except Exception as e:
+        logger.warning(f"Failed to initialize Redis checkpointing: {e}")
+
     yield
 
     # Shutdown

@@ -10,6 +10,7 @@ from datetime import datetime
 from pydantic import BaseModel, ValidationError
 from ..config import settings
 from openai import AsyncOpenAI, APIConnectionError, APIStatusError
+from langsmith import traceable
 
 T = TypeVar("T", bound=BaseModel)
 
@@ -52,6 +53,7 @@ class LLMService:
             logger.warning(f"LLM health check failed: {str(e)}")
             return False
 
+    @traceable(run_type="llm", name="generate_response")
     async def generate_response(
         self,
         prompt: str,
@@ -78,6 +80,7 @@ class LLMService:
             logger.error(f"LLM generation failed: {str(e)}")
             return self._get_fallback_response(prompt, context)
 
+    @traceable(run_type="llm", name="generate_structured_response")
     async def generate_structured_response(
         self,
         prompt: str,

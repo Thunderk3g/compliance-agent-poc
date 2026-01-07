@@ -87,7 +87,7 @@ class ComplianceEngine:
                 final_state = await compliance_graph.ainvoke(initial_state, config=config)
                 
                 # Check for interruption (HITL)
-                snapshot = compliance_graph.get_state(config)
+                snapshot = await compliance_graph.aget_state(config)
                 if snapshot.next:
                     logger.info(f"LangGraph execution PAUSED at {snapshot.next} for {submission_id}")
                     submission.status = "waiting_for_review"
@@ -157,7 +157,7 @@ class ComplianceEngine:
             try:
                 # Update state with feedback
                 update_dict = {"user_feedback": formatted_feedback}
-                compliance_graph.update_state(config, update_dict)
+                await compliance_graph.aupdate_state(config, update_dict)
                 
                 logger.info(f"Resuming LangGraph for {submission_id} with feedback")
                 
@@ -165,7 +165,7 @@ class ComplianceEngine:
                 final_state = await compliance_graph.ainvoke(None, config=config)
                 
                 # Check snapshot
-                snapshot = compliance_graph.get_state(config)
+                snapshot = await compliance_graph.aget_state(config)
                 if snapshot.next:
                      logger.info(f"LangGraph execution PAUSED again at {snapshot.next}")
                      return None
@@ -206,7 +206,7 @@ class ComplianceEngine:
             from .agents.orchestration import compliance_graph
             
             config = {"configurable": {"thread_id": str(submission_id)}}
-            snapshot = compliance_graph.get_state(config)
+            snapshot = await compliance_graph.aget_state(config)
             
             if not snapshot.values:
                 return None

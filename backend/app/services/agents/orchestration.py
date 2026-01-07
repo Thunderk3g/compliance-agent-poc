@@ -1,7 +1,7 @@
 import os
 import logging
 from langgraph.graph import StateGraph, END, START
-from redis import Redis
+from redis.asyncio import Redis as AsyncRedis
 
 from .graph.state import ComplianceState
 from .graph.nodes import (
@@ -45,15 +45,12 @@ def build_compliance_graph():
 
     # 3. Configure Persistence
     try:
-        # Using synchronous Redis client for the Checkpointer
-        # LangGraph RedisSaver works with a Redis connection object
-        from langgraph.checkpoint.redis import RedisSaver
+        # Using AsyncRedisSaver for ainvoke compatibility
+        from langgraph.checkpoint.redis import AsyncRedisSaver
         
-        # We need to ensure we use the right client based on the library version
-        # Assuming langgraph-checkpoint-redis 2.0+
-        conn = Redis.from_url(REDIS_URL)
-        checkpointer = RedisSaver(redis_client=conn)
-        logger.info(f"Using Redis persistence at {REDIS_URL}")
+        conn = AsyncRedis.from_url(REDIS_URL, decode_responses=False)
+        checkpointer = AsyncRedisSaver(redis_client=conn)
+        logger.info(f"Using Async Redis persistence at {REDIS_URL}")
         
     except ImportError:
         logger.warning("langgraph-checkpoint-redis not installed. Falling back to MemorySaver.")

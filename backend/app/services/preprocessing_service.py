@@ -441,6 +441,10 @@ Analyze the following content against the provided compliance rules.
         # Update status to preprocessing
         submission.status = "preprocessing"
         self.db.commit()
+
+        # Idempotency: Clear generic chunks if any exist to avoid duplicates on retry
+        self.db.query(ContentChunk).filter_by(submission_id=submission_id).delete()
+        self.db.commit()
         
         try:
             # Parse and chunk based on content type

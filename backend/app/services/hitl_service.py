@@ -43,7 +43,7 @@ class HITLService:
             # Depending on how the graph is paused (interrupt_before 'human_review'), 
             # updating state here will be applied before 'human_review' runs.
             
-            compliance_graph.update_state(
+            await compliance_graph.aupdate_state(
                 config, 
                 {"user_feedback": f"Action: {action}. Feedback: {feedback}"}
             )
