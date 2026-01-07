@@ -14,6 +14,7 @@ class StandardComplianceAgent(ComplianceAgent):
     def __init__(self, category: str, context_service: ContextEngineeringService):
         self._category = category
         self.context_service = context_service
+        self.system_prompt = f"You are a specialist {self.category} compliance agent. Analyze the content against the provided rules. Return ONLY valid JSON."
         
     @property
     def category(self) -> str:
@@ -23,11 +24,12 @@ class StandardComplianceAgent(ComplianceAgent):
     def name(self) -> str:
         return self._category
 
-    @property
-    def system_prompt(self) -> str:
-        return f"You are a specialist {self.category} compliance agent. Analyze the content against the provided rules. Return ONLY valid JSON."
-
     async def analyze(self, content: str, rules: List[Rule], execution_id: str = None, db: Any = None) -> ComplianceAnalysisResult:
+        # Trace: Planning
+        self._record_trace(db, execution_id, "Step 1: Planning", 
+                           thought=f"I need to analyze this content against {len(rules)} rules for {self.category}.",
+                           action="ContextEngineeringService.create_compliance_prompts")
+
         # 1. Build Prompt (Context Engineering)
         # We pass the rules under their specific category header
         rules_dict = {self.category: rules}
@@ -39,6 +41,11 @@ class StandardComplianceAgent(ComplianceAgent):
             "rules_count": len(rules)
         }
         
+        # Trace: Execution
+        self._record_trace(db, execution_id, "Step 2: LLM Call", 
+                           thought="Prompt constructed. Sending to LLM for structured analysis.",
+                           action="llm_service.generate_structured_response")
+
         # 2. Call LLM (Structured Output)
         response = await llm_service.generate_structured_response(
             prompt=prompt,
@@ -49,5 +56,10 @@ class StandardComplianceAgent(ComplianceAgent):
             db=db,
             tool_name=f"{self.name}_analysis"
         )
+        
+        # Trace: Observation
+        self._record_trace(db, execution_id, "Step 3: Result", 
+                           thought="Analysis complete.",
+                           observation=f"Found {len(response.violations)} violations.")
         
         return response

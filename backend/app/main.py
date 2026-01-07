@@ -51,6 +51,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from .api.middleware import AuthenticationMiddleware
+app.add_middleware(AuthenticationMiddleware)
+
 # Include routers
 app.include_router(submissions.router)
 app.include_router(compliance.router)

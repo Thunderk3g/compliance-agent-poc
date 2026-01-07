@@ -187,8 +187,11 @@ class DeepAnalysisService:
         if not check:
             raise ValueError(f"No compliance check found for submission: {submission_id}")
         
-        # Get active rules
-        active_rules = db.query(Rule).filter(Rule.is_active == True).all()
+        # Get active rules FOR THIS PROJECT
+        active_rules = db.query(Rule).filter(
+            Rule.is_active == True,
+            Rule.project_id == submission.project_id
+        ).all()
         logger.info(f"Found {len(active_rules)} active rules")
         
         # Step 1: Get chunks via ContentRetrievalService (CHUNK-AWARE)

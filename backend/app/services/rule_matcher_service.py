@@ -23,6 +23,7 @@ class RuleMatcherService:
         violation_description: str,
         category: str,
         severity: str,
+        project_id: uuid.UUID,
         db: Session
     ) -> Optional[uuid.UUID]:
         """
@@ -32,13 +33,14 @@ class RuleMatcherService:
             violation_description: The violation text from Deep Analysis
             category: "brand", "irdai", or "seo"
             severity: "critical", "high", "medium", or "low"
+            project_id: ID of the project to match rules against
             db: Database session
             
         Returns:
             UUID of matched rule, or None if no good match found
         """
         # Create cache key
-        cache_key = f"{category}:{severity}:{hash(violation_description)}"
+        cache_key = f"{project_id}:{category}:{severity}:{hash(violation_description)}"
         
         # Check cache
         if cache_key in self._match_cache:
@@ -46,8 +48,12 @@ class RuleMatcherService:
             return self._match_cache[cache_key]
         
         try:
-            # Fetch rules from database for this category
-            rules = db.query(Rule).filter(Rule.category == category).all()
+            # Fetch rules from database for this category AND project
+            rules = db.query(Rule).filter(
+                Rule.category == category,
+                Rule.project_id == project_id,
+                Rule.is_active == True
+            ).all()
             
             if not rules:
                 logger.warning(f"No rules found for category '{category}'")

@@ -83,18 +83,28 @@ async def get_current_user(
     return user
 
 
+
+class RoleChecker:
+    def __init__(self, allowed_roles: list[str]):
+        self.allowed_roles = allowed_roles
+
+    def __call__(self, user: User = Depends(get_current_user)):
+        # Super admin always has access
+        if user.role == "super_admin":
+            return user
+            
+        if user.role not in self.allowed_roles:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Operation not permitted. Required roles: {self.allowed_roles}"
+            )
+        return user
+
 async def require_super_admin(
     current_user: User = Depends(get_current_user)
 ) -> User:
     """
     Require super_admin role.
-
     Raises 403 Forbidden if user is not a super admin.
     """
-    if current_user.role != "super_admin":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Super admin privileges required for this operation"
-        )
-
-    return current_user
+    return RoleChecker(["super_admin"])(current_user)

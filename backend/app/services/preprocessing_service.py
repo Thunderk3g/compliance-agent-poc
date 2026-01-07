@@ -76,7 +76,7 @@ Analyze the following content against the provided compliance rules.
         self.sentence_splitter_type = None
         self._init_sentence_splitter()
 
-    def create_compliance_prompts(self, content: str, rules: Dict[str, List[Rule]]) -> str:
+    def create_compliance_prompts(self, content: str, rules: Dict[str, List[Any]]) -> str:
         """
         Build the compliance checking prompt (Context Construction).
         Factor 3: Own Your Context Window.
@@ -86,9 +86,17 @@ Analyze the following content against the provided compliance rules.
             if category_rules:
                 section_text = f"**{category.upper()} Rules:**\n"
                 for rule in category_rules:
-                    # Sanitize rule text to save tokens/avoid confusion
-                    rule_text = rule.rule_text.replace("\n", " ").strip()
-                    section_text += f"- [ID: {rule.id}] {rule_text} (Severity: {rule.severity})\n"
+                    # Handle both Dict and ORM object
+                    if isinstance(rule, dict):
+                        rule_text = rule.get("rule_text", "").replace("\n", " ").strip()
+                        rule_id = rule.get("id")
+                        severity = rule.get("severity")
+                    else:
+                        rule_text = rule.rule_text.replace("\n", " ").strip()
+                        rule_id = rule.id
+                        severity = rule.severity
+                        
+                    section_text += f"- [ID: {rule_id}] {rule_text} (Severity: {severity})\n"
                 rules_sections.append(section_text)
 
         rules_section = "\n".join(rules_sections)
