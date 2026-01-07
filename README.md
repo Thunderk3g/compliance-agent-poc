@@ -168,8 +168,19 @@ The POC implements a lightweight but robust security model suitable for demonstr
   - Rule Generator (LLM Extraction)
   - Admin Dashboard
   - Token-based Chunking
+  - **LangSmith Integration** (Full Tracing & Debugging)
 
 - **Phase 3: Deep Analysis & Verification (Next)**
   - "Enterprise Architect" Agent for complex, cross-document reasoning.
   - Automated Regression Testing for rules.
   - Hybrid Rule Logic (combining Regex + Semantic Search).
+
+---
+
+## 8. Observability (LangSmith)
+
+To ensure trust and debug complex agentic workflows, the system integrates **LangSmith** for full-stack LLM observability.
+
+- **Tracing:** Every `ComplianceEngine` execution is traced, capturing inputs, outputs, and latency for each step (`process_chunk`, `scoring`).
+- **Metadata Tagging:** Traces are automatically tagged with `Project ID` and `User ID` for granular filtering.
+- **Visualization:** clearly displays the directed cyclic graph (DAG) execution, making it easy to spot loops or stalled states in the LangGraph orchestration.

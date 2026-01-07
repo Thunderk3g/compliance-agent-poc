@@ -1,4 +1,4 @@
-version: '3.8'
+version: "3.8"
 
 services:
   postgres:
@@ -15,7 +15,7 @@ services:
     networks:
       - compliance-network
     healthcheck:
-      test: [ "CMD-SHELL", "pg_isready -U compliance_user -d compliance_db" ]
+      test: ["CMD-SHELL", "pg_isready -U compliance_user -d compliance_db"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -28,7 +28,7 @@ services:
     networks:
       - compliance-network
     healthcheck:
-      test: [ "CMD", "redis-cli", "ping" ]
+      test: ["CMD", "redis-cli", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -49,8 +49,6 @@ services:
     volumes:
       - pgadmin_data:/var/lib/pgadmin
 
-
-
   backend:
     build: ./backend
     container_name: compliance-backend
@@ -66,6 +64,10 @@ services:
       - LLM_MODEL=gemini-2.0-flash
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
+      - LANGCHAIN_TRACING_V2=true
+      - LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
+      - LANGCHAIN_API_KEY=${LANGCHAIN_API_KEY}
+      - LANGCHAIN_PROJECT=${LANGCHAIN_PROJECT}
     ports:
       - "8000:8000"
     volumes:
@@ -84,14 +86,11 @@ services:
       sh -c "alembic upgrade head &&
              uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
 
-
-
 volumes:
   postgres_data:
   pgadmin_data:
   ollama_data:
   uploads:
-
 
 networks:
   compliance-network:

@@ -5,6 +5,7 @@ import traceback
 import uuid
 from sqlalchemy.orm import Session
 from datetime import datetime
+from langsmith import traceable
 
 from ..models.rule import Rule
 from ..models.submission import Submission
@@ -69,7 +70,14 @@ class ComplianceEngine:
             }
             
             # Config for persistence
-            config = {"configurable": {"thread_id": str(submission_id)}}
+            config = {
+                "configurable": {"thread_id": str(submission_id)},
+                "metadata": {
+                    "submission_id": str(submission_id),
+                    "project_id": str(submission.project_id) if submission.project_id else None,
+                    "user_id": str(submission.submitted_by) if submission.submitted_by else None
+                }
+            }
             
             try:
                 logger.info(f"Starting LangGraph analysis for {submission_id}")
@@ -138,7 +146,13 @@ class ComplianceEngine:
             
             # Set Context
             token = GraphContext.set_db_session(db)
-            config = {"configurable": {"thread_id": str(submission_id)}}
+            config = {
+                "configurable": {"thread_id": str(submission_id)},
+                 "metadata": {
+                    "submission_id": str(submission_id),
+                    "user_id": str(submission.submitted_by) if submission.submitted_by else None
+                }
+            }
             
             try:
                 # Update state with feedback
@@ -259,6 +273,7 @@ class ComplianceEngine:
         )
 
     @staticmethod
+    @traceable(name="process_chunk_step", run_type="chain")
     async def process_chunk_step(
         state: ComplianceState, 
         chunk: Any, 
@@ -369,6 +384,7 @@ class ComplianceEngine:
         return state
 
     @staticmethod
+    @traceable(name="scoring_step", run_type="chain")
     def scoring_step(state: ComplianceState, db: Session) -> ComplianceState:
         """
         Pure logic step: Calculate scores based on accumulated violations in state.
