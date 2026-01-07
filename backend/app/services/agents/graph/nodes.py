@@ -175,7 +175,7 @@ async def analysis_node(state: ComplianceState):
                     v_dict["chunk_id"] = str(chunk_id)
                     v_dict["chunk_index"] = chunk_index
                     
-                    loc = f"chunk:{chunk_index}"
+                    loc = f"chunk:{chunk_id}"
                     meta = chunk_data.get("metadata", {})
                     if meta.get("page_number"):
                         loc += f":page:{meta['page_number']}"
