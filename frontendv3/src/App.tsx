@@ -7,21 +7,12 @@ import { ThemeProvider } from "./contexts/ThemeContext";
 import { UserProvider } from "./contexts/UserContext";
 import { queryClient } from "./lib/query";
 import ComponentsDemo from "./pages/ComponentsDemo";
+import Dashboard from "./pages/Dashboard";
 import Landing from "./pages/Landing";
 import Login from "./pages/Login";
 import Onboarding from "./pages/Onboarding";
 import OnboardingChoice from "./pages/OnboardingChoice";
 import Projects from "./pages/Projects";
-
-// Placeholder pages
-const Dashboard = () => (
-  <div className="p-8">
-    <h1 className="text-4xl font-bold">Project Dashboard</h1>
-    <p className="text-muted-foreground mt-2">
-      Project-specific dashboard with breadcrumbs
-    </p>
-  </div>
-);
 
 function App() {
   return (

@@ -1,12 +1,12 @@
-import { ChevronDown, ChevronRight, Moon, Sun } from 'lucide-react';
-import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { useProject } from '../../contexts/ProjectContext';
-import { useTheme } from '../../contexts/ThemeContext';
-import { useUser } from '../../contexts/UserContext';
-import { useProjects } from '../../services/projects';
-import { Button } from '../ui/button';
-import { Separator } from '../ui/separator';
+import { ChevronDown, ChevronRight, Moon, Sun } from "lucide-react";
+import { useState } from "react";
+import { Link, useNavigate, useParams } from "react-router-dom";
+import { useProject } from "../../contexts/ProjectContext";
+import { useTheme } from "../../contexts/ThemeContext";
+import { useUser } from "../../contexts/UserContext";
+import { useProjects } from "../../services/projects";
+import { Button } from "../ui/button";
+import { Separator } from "../ui/separator";
 
 interface AppNavbarProps {
   showProjectSelector?: boolean;
@@ -25,8 +25,9 @@ export function AppNavbar({ showProjectSelector = true }: AppNavbarProps) {
 
   // Get the actual project name from the projects list
   const currentProjectData = projects.find((p: any) => p.id === projectId);
-  const projectName = currentProjectData?.name || currentProject?.name || 'Project';
-  const teamName = user?.name || user?.email || 'User';
+  const projectName =
+    currentProjectData?.name || currentProject?.name || "Project";
+  const teamName = user?.name || user?.email || "User";
 
   const handleProjectSwitch = (newProjectId: string) => {
     navigate(`/projects/${newProjectId}/dashboard`);
@@ -34,7 +35,7 @@ export function AppNavbar({ showProjectSelector = true }: AppNavbarProps) {
   };
 
   return (
-    <div className="border-b border-border bg-background">
+    <div className="sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       {/* Top bar - Logo, Team Name, Breadcrumbs, Theme Toggle */}
       <div className="h-14 px-6 flex items-center justify-between">
         {/* Left side - Logo + Breadcrumbs */}
@@ -42,7 +43,9 @@ export function AppNavbar({ showProjectSelector = true }: AppNavbarProps) {
           {/* Logo */}
           <Link to="/projects" className="flex items-center gap-2">
             <div className="w-7 h-7 bg-primary rounded flex items-center justify-center">
-              <span className="text-primary-foreground font-bold text-xs">CB</span>
+              <span className="text-primary-foreground font-bold text-xs">
+                CB
+              </span>
             </div>
             <span className="font-semibold text-sm">Compliance Bot</span>
           </Link>
@@ -61,7 +64,7 @@ export function AppNavbar({ showProjectSelector = true }: AppNavbarProps) {
               <ChevronRight className="w-4 h-4 text-muted-foreground" />
 
               <button
-                onClick={() => navigate('/projects')}
+                onClick={() => navigate("/projects")}
                 className="text-sm text-muted-foreground hover:text-foreground transition-colors px-2 py-1 rounded hover:bg-accent"
               >
                 Projects
@@ -99,8 +102,8 @@ export function AppNavbar({ showProjectSelector = true }: AppNavbarProps) {
                               onClick={() => handleProjectSwitch(project.id)}
                               className={`w-full text-left px-3 py-2 rounded text-sm transition-colors ${
                                 project.id === projectId
-                                  ? 'bg-accent text-accent-foreground'
-                                  : 'hover:bg-accent'
+                                  ? "bg-accent text-accent-foreground"
+                                  : "hover:bg-accent"
                               }`}
                             >
                               <div className="font-medium">{project.name}</div>
@@ -115,7 +118,7 @@ export function AppNavbar({ showProjectSelector = true }: AppNavbarProps) {
                         <Separator className="my-2" />
                         <button
                           onClick={() => {
-                            navigate('/onboarding');
+                            navigate("/onboarding");
                             setShowProjectDropdown(false);
                           }}
                           className="w-full text-left px-3 py-2 rounded text-sm text-primary hover:bg-accent transition-colors"
@@ -140,15 +143,19 @@ export function AppNavbar({ showProjectSelector = true }: AppNavbarProps) {
             aria-label="Toggle theme"
             className="h-8 w-8"
           >
-            {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
+            {theme === "light" ? (
+              <Moon className="h-4 w-4" />
+            ) : (
+              <Sun className="h-4 w-4" />
+            )}
           </Button>
 
           {/* Profile Avatar */}
           <button
-            onClick={() => navigate('/settings')}
+            onClick={() => navigate("/settings")}
             className="w-8 h-8 rounded-full bg-primary flex items-center justify-center text-primary-foreground text-xs font-medium hover:opacity-80 transition-opacity"
           >
-            {user?.email?.[0]?.toUpperCase() || 'U'}
+            {user?.email?.[0]?.toUpperCase() || "U"}
           </button>
         </div>
       </div>

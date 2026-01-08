@@ -1,4 +1,5 @@
 import { useProjects } from "@/services/projects";
+import dayjs from "dayjs";
 import { FolderPlus, Plus } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "../components/ui/button";
@@ -62,7 +63,7 @@ export default function Projects() {
                     <FolderPlus className="w-5 h-5 text-primary" />
                   </div>
                   <span className="text-xs text-muted-foreground">
-                    {new Date(project.created_at).toLocaleDateString()}
+                    {dayjs(project.created_at).format("MMM D, YYYY")}
                   </span>
                 </div>
 

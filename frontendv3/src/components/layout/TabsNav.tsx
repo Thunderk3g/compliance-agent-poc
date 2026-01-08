@@ -1,5 +1,5 @@
-import { NavLink } from 'react-router-dom';
-import { cn } from '../../lib/utils';
+import { NavLink } from "react-router-dom";
+import { cn } from "../../lib/utils";
 
 export interface Tab {
   name: string;
@@ -12,7 +12,7 @@ interface TabsNavProps {
 
 export function TabsNav({ tabs }: TabsNavProps) {
   return (
-    <nav className="h-12 border-b border-border bg-background">
+    <nav className="sticky top-14 z-40 h-12 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
       <div className="px-6 h-full flex items-center gap-6">
         {tabs.map((tab) => (
           <NavLink
@@ -20,10 +20,10 @@ export function TabsNav({ tabs }: TabsNavProps) {
             to={tab.path}
             className={({ isActive }) =>
               cn(
-                'text-sm py-3 border-b-2 transition-colors',
+                "text-sm py-3 border-b-2 transition-colors",
                 isActive
-                  ? 'text-foreground border-foreground font-medium'
-                  : 'text-muted-foreground border-transparent hover:text-foreground'
+                  ? "text-foreground border-foreground font-medium"
+                  : "text-muted-foreground border-transparent hover:text-foreground"
               )
             }
           >

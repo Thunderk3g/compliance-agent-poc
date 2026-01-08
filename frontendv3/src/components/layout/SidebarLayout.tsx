@@ -19,8 +19,8 @@ export function SidebarLayout({
       <TabsNav tabs={tabs} />
 
       <div className="flex flex-1">
-        {/* Left Sidebar */}
-        <aside className="w-64 border-r border-border bg-background">
+        {/* Left Sidebar - Sticky below navbar */}
+        <aside className="w-64 border-r border-border bg-background sticky top-[104px] self-start h-[calc(100vh-104px)] overflow-y-auto">
           <div className="p-6">
             {sidebarContent || (
               <div className="text-center text-muted-foreground text-sm">

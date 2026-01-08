@@ -1,54 +1,55 @@
-import axios from 'axios';
+import axios from "axios";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
 
 export const apiClient = axios.create({
   baseURL: API_BASE_URL,
   headers: {
-    'Content-Type': 'application/json',
+    "Content-Type": "application/json",
   },
 });
 
 // Add request interceptor to inject User ID
 apiClient.interceptors.request.use((config) => {
-  let userId = localStorage.getItem('userId');
-  if (!userId || userId === 'demo-user-id') {
+  let userId = localStorage.getItem("userId");
+  if (!userId || userId === "demo-user-id") {
     // Generate or use default valid UUID for demo
-    userId = '550e8400-e29b-41d4-a716-446655440000';
-    localStorage.setItem('userId', userId);
+    userId = "550e8400-e29b-41d4-a716-446655440000";
+    localStorage.setItem("userId", userId);
   }
-  console.log('[API] Injecting X-User-Id:', userId);
-  config.headers['X-User-Id'] = userId;
+  console.log("[API] Injecting X-User-Id:", userId);
+  config.headers["X-User-Id"] = userId;
   return config;
 });
 
 export const api = {
   // Submissions
   uploadSubmission: (data: FormData) =>
-    apiClient.post('/api/submissions/upload', data, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+    apiClient.post("/api/submissions/upload", data, {
+      headers: { "Content-Type": "multipart/form-data" },
     }),
 
-  getSubmissions: (projectId?: string) => apiClient.get('/api/submissions', { params: { project_id: projectId } }),
+  getSubmissions: (projectId?: string) =>
+    apiClient.get("/api/submissions", { params: { project_id: projectId } }),
 
-  getSubmission: (id: string) =>
-    apiClient.get(`/api/submissions/${id}`),
+  getSubmission: (id: string) => apiClient.get(`/api/submissions/${id}`),
 
-  getSubmissionById: (id: string) =>
-    apiClient.get(`/api/submissions/${id}`),
+  getSubmissionById: (id: string) => apiClient.get(`/api/submissions/${id}`),
 
   analyzeSubmission: (id: string) =>
     apiClient.post(`/api/submissions/${id}/analyze`),
 
-  deleteSubmission: (id: string) =>
-    apiClient.delete(`/api/submissions/${id}`),
+  deleteSubmission: (id: string) => apiClient.delete(`/api/submissions/${id}`),
 
-  deleteAllSubmissions: () =>
-    apiClient.delete('/api/submissions'),
+  deleteAllSubmissions: () => apiClient.delete("/api/submissions"),
 
   // HITL
   resumeSubmission: (id: string, decision: string, feedback?: string) =>
-    apiClient.post(`/api/submissions/${id}/resume`, { action: decision, feedback }),
+    apiClient.post(`/api/submissions/${id}/resume`, {
+      action: decision,
+      feedback,
+    }),
 
   // PDF Modification
   applyPdfFixes: (id: string) =>
@@ -56,7 +57,7 @@ export const api = {
 
   downloadModifiedPdf: (id: string) =>
     apiClient.get(`/api/submissions/${id}/download-modified`, {
-      responseType: 'blob'
+      responseType: "blob",
     }),
 
   // Compliance
@@ -70,29 +71,33 @@ export const api = {
     apiClient.get(`/api/compliance/${submissionId}/violations`),
 
   // Dashboard
-  getDashboardStats: () => apiClient.get('/api/dashboard/stats'),
+  getDashboardStats: () => apiClient.get("/api/dashboard/stats"),
 
-  getRecentSubmissions: () => apiClient.get('/api/dashboard/recent'),
+  getRecentSubmissions: () => apiClient.get("/api/dashboard/recent"),
 
   getDashboardTrends: (days: number = 30) =>
-    apiClient.get('/api/dashboard/trends', { params: { days } }),
+    apiClient.get("/api/dashboard/trends", { params: { days } }),
 
   getViolationsHeatmap: () =>
-    apiClient.get('/api/dashboard/violations-heatmap'),
+    apiClient.get("/api/dashboard/violations-heatmap"),
 
   getTopViolations: (limit: number = 5) =>
-    apiClient.get('/api/dashboard/top-violations', { params: { limit } }),
+    apiClient.get("/api/dashboard/top-violations", { params: { limit } }),
 
   // Phase 2: Admin - Rule Management
-  generateRulesFromDocument: (file: File, documentTitle: string, userId: string) => {
+  generateRulesFromDocument: (
+    file: File,
+    documentTitle: string,
+    userId: string
+  ) => {
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('document_title', documentTitle);
+    formData.append("file", file);
+    formData.append("document_title", documentTitle);
 
-    return apiClient.post('/api/admin/rules/generate', formData, {
+    return apiClient.post("/api/admin/rules/generate", formData, {
       headers: {
-        'Content-Type': 'multipart/form-data',
-        'X-User-Id': userId,
+        "Content-Type": "multipart/form-data",
+        "X-User-Id": userId,
       },
     });
   },
@@ -107,83 +112,96 @@ export const api = {
     userId: string;
   }) => {
     const { userId, ...queryParams } = params;
-    return apiClient.get('/api/admin/rules', {
+    return apiClient.get("/api/admin/rules", {
       params: queryParams,
-      headers: { 'X-User-Id': userId },
+      headers: { "X-User-Id": userId },
     });
   },
 
   getRule: (ruleId: string, userId: string) =>
     apiClient.get(`/api/admin/rules/${ruleId}`, {
-      headers: { 'X-User-Id': userId },
+      headers: { "X-User-Id": userId },
     }),
 
   updateRule: (ruleId: string, data: any, userId: string) =>
     apiClient.put(`/api/admin/rules/${ruleId}`, data, {
-      headers: { 'X-User-Id': userId },
+      headers: { "X-User-Id": userId },
     }),
 
   deleteRule: (ruleId: string, userId: string) =>
     apiClient.delete(`/api/admin/rules/${ruleId}`, {
-      headers: { 'X-User-Id': userId },
+      headers: { "X-User-Id": userId },
     }),
 
   deleteAllRules: (userId: string) =>
-    apiClient.delete('/api/admin/rules', {
-      headers: { 'X-User-Id': userId },
+    apiClient.delete("/api/admin/rules", {
+      headers: { "X-User-Id": userId },
     }),
 
   createRule: (data: any, userId: string) =>
-    apiClient.post('/api/admin/rules', data, {
-      headers: { 'X-User-Id': userId },
+    apiClient.post("/api/admin/rules", data, {
+      headers: { "X-User-Id": userId },
     }),
 
   getRuleStats: (userId: string) =>
-    apiClient.get('/api/admin/rules/stats/summary', {
-      headers: { 'X-User-Id': userId },
+    apiClient.get("/api/admin/rules/stats/summary", {
+      headers: { "X-User-Id": userId },
     }),
 
   // Rule Preview Workflow (Phase 2 Enhancement)
-  previewRulesFromDocument: (file: File, documentTitle: string, userId: string) => {
+  previewRulesFromDocument: (
+    file: File,
+    documentTitle: string,
+    userId: string
+  ) => {
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('document_title', documentTitle);
+    formData.append("file", file);
+    formData.append("document_title", documentTitle);
 
-    return apiClient.post('/api/admin/rules/preview', formData, {
+    return apiClient.post("/api/admin/rules/preview", formData, {
       headers: {
-        'Content-Type': 'multipart/form-data',
-        'X-User-Id': userId,
+        "Content-Type": "multipart/form-data",
+        "X-User-Id": userId,
       },
     });
   },
 
-  refineRule: (data: {
-    rule_text: string;
-    refinement_instruction: string;
-    category: string;
-    severity: string;
-  }, userId: string) =>
-    apiClient.post('/api/admin/rules/refine', data, {
-      headers: { 'X-User-Id': userId },
+  refineRule: (
+    data: {
+      rule_text: string;
+      refinement_instruction: string;
+      category: string;
+      severity: string;
+    },
+    userId: string
+  ) =>
+    apiClient.post("/api/admin/rules/refine", data, {
+      headers: { "X-User-Id": userId },
     }),
 
-  bulkSubmitRules: (data: {
-    document_title: string;
-    approved_rules: any[];
-  }, userId: string) =>
-    apiClient.post('/api/admin/rules/bulk-submit', data, {
-      headers: { 'X-User-Id': userId },
+  bulkSubmitRules: (
+    data: {
+      document_title: string;
+      approved_rules: any[];
+    },
+    userId: string
+  ) =>
+    apiClient.post("/api/admin/rules/bulk-submit", data, {
+      headers: { "X-User-Id": userId },
     }),
 
   // Deep Compliance Research Mode
-  triggerDeepAnalysis: (submissionId: string, severityWeights: {
-    critical: number;
-    high: number;
-    medium: number;
-    low: number;
-  }) =>
+  triggerDeepAnalysis: (
+    submissionId: string,
+    severityWeights: {
+      critical: number;
+      high: number;
+      medium: number;
+      low: number;
+    }
+  ) =>
     apiClient.post(`/api/compliance/${submissionId}/deep-analyze`, {
-      severity_weights: severityWeights
+      severity_weights: severityWeights,
     }),
 
   getDeepAnalysisResults: (submissionId: string) =>
@@ -194,7 +212,7 @@ export const api = {
 
   downloadDeepAnalysisReport: (submissionId: string) =>
     apiClient.get(`/api/compliance/${submissionId}/deep-analysis/export`, {
-      responseType: 'blob'
+      responseType: "blob",
     }),
 
   syncDeepAnalysisResults: (submissionId: string) =>
@@ -202,7 +220,7 @@ export const api = {
 
   // Phase 3: Chunked Content Processing
   getPreprocessingStats: () =>
-    apiClient.get('/api/dashboard/preprocessing-stats'),
+    apiClient.get("/api/dashboard/preprocessing-stats"),
 
   getSubmissionChunks: (submissionId: string) =>
     apiClient.get(`/api/preprocessing/${submissionId}/chunks`),
@@ -210,8 +228,10 @@ export const api = {
   getPreprocessingStatus: (submissionId: string) =>
     apiClient.get(`/api/preprocessing/${submissionId}/status`),
 
-  triggerPreprocessing: (submissionId: string, params?: { chunk_size?: number; overlap?: number }) =>
-    apiClient.post(`/api/preprocessing/${submissionId}`, params),
+  triggerPreprocessing: (
+    submissionId: string,
+    params?: { chunk_size?: number; overlap?: number }
+  ) => apiClient.post(`/api/preprocessing/${submissionId}`, params),
 
   // Adaptive Compliance Engine: Onboarding
   startOnboarding: (data: {
@@ -221,30 +241,34 @@ export const api = {
     brand_guidelines?: string;
     analysis_scope: string[];
     region?: string;
-  }) =>
-    apiClient.post('/api/onboarding/start', data),
+  }) => apiClient.post("/api/onboarding/start", data),
 
   getUserConfig: (userId: string) =>
     apiClient.get(`/api/onboarding/${userId}/config`),
 
   updateUserConfig: (
     userId: string,
-    updates: { industry?: string; brand_name?: string; analysis_scope?: string[] }
+    updates: {
+      industry?: string;
+      brand_name?: string;
+      analysis_scope?: string[];
+    }
   ) => {
     const params = new URLSearchParams();
     if (updates.industry) params.append("industry", updates.industry);
     if (updates.brand_name) params.append("brand_name", updates.brand_name);
     if (updates.analysis_scope) {
-      updates.analysis_scope.forEach(scope => params.append("analysis_scope", scope));
+      updates.analysis_scope.forEach((scope) =>
+        params.append("analysis_scope", scope)
+      );
     }
     return apiClient.put(`/api/onboarding/${userId}/config?${params}`);
   },
   // Phase 1: Project System
   createProject: (data: { name: string; description: string }) =>
-    apiClient.post('/api/projects/', data),
+    apiClient.post("/api/projects/", data),
 
-  getProjects: () =>
-    apiClient.get('/api/projects/'),
+  getProjects: () => apiClient.get("/api/projects/"),
 
   getProject: (projectId: string) =>
     apiClient.get(`/api/projects/${projectId}`),
@@ -254,18 +278,31 @@ export const api = {
 
   uploadGuideline: (projectId: string, file: File) => {
     const formData = new FormData();
-    formData.append('file', file);
+    formData.append("file", file);
     return apiClient.post(`/api/projects/${projectId}/guidelines`, formData, {
-      headers: { 'Content-Type': 'multipart/form-data' }
+      headers: { "Content-Type": "multipart/form-data" },
     });
   },
   deleteGuideline: (projectId: string, guidelineId: string) =>
     apiClient.delete(`/api/projects/${projectId}/guidelines/${guidelineId}`),
-  improveRules: (projectId: string, guidelineId: string, instructions: string) =>
-    apiClient.post(`/api/projects/${projectId}/guidelines/${guidelineId}/improve-rules`, { instructions }),
+  improveRules: (
+    projectId: string,
+    guidelineId: string,
+    instructions: string
+  ) =>
+    apiClient.post(
+      `/api/projects/${projectId}/guidelines/${guidelineId}/improve-rules`,
+      { instructions }
+    ),
 
-  refineProjectRule: (projectId: string, ruleId: string, instructions: string) =>
-    apiClient.post(`/api/projects/${projectId}/rules/${ruleId}/refine`, { instructions }),
+  refineProjectRule: (
+    projectId: string,
+    ruleId: string,
+    instructions: string
+  ) =>
+    apiClient.post(`/api/projects/${projectId}/rules/${ruleId}/refine`, {
+      instructions,
+    }),
 
   deleteProjectRule: (projectId: string, ruleId: string) =>
     apiClient.delete(`/api/projects/${projectId}/rules/${ruleId}`),
