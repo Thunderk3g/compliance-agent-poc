@@ -21,7 +21,14 @@ export function AppNavbar({ showProjectSelector = true }: AppNavbarProps) {
   const [showProjectDropdown, setShowProjectDropdown] = useState(false);
 
   // Fetch all projects for the dropdown
-  const { data: projects = [] } = useProjects();
+  const { data: projectsData } = useProjects();
+
+  // Ensure projects is always an array (API might return { data: [...] } or [...])
+  const projects = Array.isArray(projectsData)
+    ? projectsData
+    : Array.isArray(projectsData?.data)
+      ? projectsData.data
+      : [];
 
   // Get the actual project name from the projects list
   const currentProjectData = projects.find((p: any) => p.id === projectId);

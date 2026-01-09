@@ -28,11 +28,7 @@ export default function OnboardingChoice() {
         {/* Options */}
         <div className="grid md:grid-cols-2 gap-6">
           {/* Option 1: Quick Start */}
-          <StackedCard
-            stackColor="bg-primary/20"
-            interactive
-            onClick={() => navigate("/projects")}
-          >
+          <StackedCard stackColor="bg-primary/20">
             <div className="space-y-6">
               <div className="w-12 h-12 rounded bg-primary/10 flex items-center justify-center">
                 <Target className="w-6 h-6 text-primary" />
@@ -61,7 +57,7 @@ export default function OnboardingChoice() {
                 </li>
               </ul>
 
-              <Button className="w-full" size="lg">
+              <Button className="w-full" size="lg" onClick={() => navigate("/projects")}>
                 Take Me to Projects
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>
@@ -69,11 +65,7 @@ export default function OnboardingChoice() {
           </StackedCard>
 
           {/* Option 2: Guided Onboarding */}
-          <StackedCard
-            stackColor="bg-accent"
-            interactive
-            onClick={() => navigate("/onboarding/flow")}
-          >
+          <StackedCard stackColor="bg-accent">
             <div className="space-y-6">
               <div className="w-12 h-12 rounded bg-accent flex items-center justify-center">
                 <Sparkles className="w-6 h-6" />
@@ -102,7 +94,7 @@ export default function OnboardingChoice() {
                 </li>
               </ul>
 
-              <Button className="w-full" size="lg" variant="outline">
+              <Button className="w-full" size="lg" variant="outline" onClick={() => navigate("/onboarding/flow")}>
                 Start Guided Setup
                 <ArrowRight className="w-4 h-4 ml-2" />
               </Button>

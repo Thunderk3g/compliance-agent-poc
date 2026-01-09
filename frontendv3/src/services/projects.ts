@@ -18,7 +18,20 @@ export function useProjects() {
     queryKey: projectKeys.lists(),
     queryFn: async () => {
       const response = await api.getProjects();
-      return response.data as Project[];
+      const data = response.data;
+      // Handle various response formats defensively
+      if (Array.isArray(data)) {
+        return data as Project[];
+      }
+      if (data && typeof data === 'object') {
+        // Check for common wrapper patterns
+        if (Array.isArray(data.items)) return data.items as Project[];
+        if (Array.isArray(data.projects)) return data.projects as Project[];
+        if (Array.isArray(data.data)) return data.data as Project[];
+      }
+      // Fallback to empty array
+      console.warn('Unexpected projects response format:', data);
+      return [];
     },
   });
 }
