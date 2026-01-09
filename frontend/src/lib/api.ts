@@ -265,13 +265,30 @@ export const api = {
     return apiClient.put(`/api/onboarding/${userId}/config?${params}`);
   },
   // Phase 1: Project System
-  createProject: (data: { name: string; description: string }) =>
+  createProject: (data: { 
+    name: string; 
+    description: string;
+    agent_voice?: boolean;
+    agent_compliance?: boolean;
+    agent_analytics?: boolean;
+    agent_sales?: boolean;
+  }) =>
     apiClient.post("/api/projects/", data),
 
   getProjects: () => apiClient.get("/api/projects/"),
 
   getProject: (projectId: string) =>
     apiClient.get(`/api/projects/${projectId}`),
+
+  updateProject: (projectId: string, data: {
+    name?: string;
+    description?: string;
+    agent_voice?: boolean;
+    agent_compliance?: boolean;
+    agent_analytics?: boolean;
+    agent_sales?: boolean;
+    agent_config?: any;
+  }) => apiClient.put(`/api/projects/${projectId}`, data),
 
   deleteProject: (projectId: string) =>
     apiClient.delete(`/api/projects/${projectId}`),
@@ -309,4 +326,92 @@ export const api = {
 
   getProjectGuidelines: (projectId: string) =>
     apiClient.get(`/api/projects/${projectId}/guidelines`),
+
+  // ============================================
+  // Multi-Agent System APIs
+  // ============================================
+
+  // Voice Audit Agent
+  analyzeVoiceCall: (data: {
+    call_id?: string;
+    transcript?: Array<{ timestamp: number; speaker: string; text: string }>;
+    audio_url?: string;
+  }) => apiClient.post("/voice/analyze", data),
+
+  uploadAudioFile: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiClient.post("/voice/upload", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+
+  getVoiceJobStatus: (jobId: string) =>
+    apiClient.get(`/voice/status/${jobId}`),
+
+  getVoiceViolationTypes: () => apiClient.get("/voice/violations/types"),
+
+  // Analytics / BI Agent
+  getAnalyticsInsights: (query: string, projectId?: string) =>
+    apiClient.post("/analytics/insights", {
+      query,
+      project_id: projectId,
+    }),
+
+  getAnalyticsTrends: (period: string = "month", projectId?: string) =>
+    apiClient.get("/analytics/trends", {
+      params: { period, project_id: projectId },
+    }),
+
+  getViolationHeatmap: (projectId?: string) =>
+    apiClient.get("/analytics/heatmap", {
+      params: { project_id: projectId },
+    }),
+
+  getAgentPerformance: () => apiClient.get("/analytics/performance"),
+
+  getExecutiveSummary: () => apiClient.get("/analytics/summary"),
+
+  // Sales Chat Agent
+  sendChatMessage: (message: string, sessionId?: string) =>
+    apiClient.post("/chat/message", {
+      message,
+      session_id: sessionId,
+    }),
+
+  getChatHistory: (sessionId: string) =>
+    apiClient.get(`/chat/history/${sessionId}`),
+
+  getCustomerProfile: (sessionId: string) =>
+    apiClient.get(`/chat/profile/${sessionId}`),
+
+  calculateRiskAssessment: (data: {
+    age: number;
+    smoker?: boolean;
+    occupation?: string;
+    pre_existing?: string[];
+  }) =>
+    apiClient.post("/chat/risk-assessment", null, {
+      params: data,
+    }),
+
+  // Voice Reports
+  getVoiceReportsByProject: (projectId: string) =>
+    apiClient.get(`/voice-reports/project/${projectId}`),
+
+  getVoiceReport: (reportId: string) =>
+    apiClient.get(`/voice-reports/${reportId}`),
+
+  // Analytics Reports
+  getAnalyticsReportsByProject: (projectId: string) =>
+    apiClient.get(`/analytics-reports/project/${projectId}`),
+
+  getAnalyticsReport: (reportId: string) =>
+    apiClient.get(`/analytics-reports/${reportId}`),
+
+  analyzeVoice: (projectId: string) =>
+    apiClient.post(`/voice-reports/${projectId}/analyze`),
+
+  analyzeAnalytics: (projectId: string) =>
+    apiClient.post(`/analytics-reports/${projectId}/analyze`),
 };

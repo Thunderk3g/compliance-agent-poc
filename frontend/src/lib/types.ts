@@ -289,6 +289,12 @@ export interface Project {
   description?: string;
   created_by: string;
   created_at?: string;
+  // Agent Configuration
+  agent_voice?: boolean;
+  agent_compliance?: boolean;
+  agent_analytics?: boolean;
+  agent_sales?: boolean;
+  agent_config?: any;
 }
 
 export interface Guideline {

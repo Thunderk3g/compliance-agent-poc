@@ -11,6 +11,8 @@ from .graph.nodes import (
     scoring_node,
     refinement_node
 )
+from .graph.voice_nodes import voice_analysis_node, voice_output_node
+from .graph.analytics_nodes import analytics_reasoning_node, analytics_output_node
 from .graph.context import GraphContext
 
 logger = logging.getLogger(__name__)
@@ -69,8 +71,34 @@ def build_compliance_graph():
     
     return app
 
-# Initialize Graph
+def build_voice_graph():
+    """Constructs the Voice Audit Agent StateGraph."""
+    workflow = StateGraph(ComplianceState)
+    workflow.add_node("voice_analysis", voice_analysis_node)
+    workflow.add_node("voice_output", voice_output_node)
+    
+    workflow.add_edge(START, "voice_analysis")
+    workflow.add_edge("voice_analysis", "voice_output")
+    workflow.add_edge("voice_output", END)
+    
+    return workflow.compile()
+
+def build_analytics_graph():
+    """Constructs the BI Analytics Agent StateGraph."""
+    workflow = StateGraph(ComplianceState)
+    workflow.add_node("analytics_reasoning", analytics_reasoning_node)
+    workflow.add_node("analytics_output", analytics_output_node)
+    
+    workflow.add_edge(START, "analytics_reasoning")
+    workflow.add_edge("analytics_reasoning", "analytics_output")
+    workflow.add_edge("analytics_output", END)
+    
+    return workflow.compile()
+
+# Initialize Graphs
 compliance_graph = build_compliance_graph()
+voice_graph = build_voice_graph()
+analytics_graph = build_analytics_graph()
 
 # Helper to visualize
 def get_mermaid_png():

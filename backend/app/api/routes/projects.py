@@ -86,7 +86,33 @@ async def upload_guideline(
         "errors": result["errors"]
     }
 
-from ...schemas.project import ProjectCreate, ProjectResponse, GuidelineResponse, ImproveRulesRequest
+from ...schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, GuidelineResponse, ImproveRulesRequest
+
+@router.put("/{project_id}", response_model=ProjectResponse)
+def update_project(
+    project_id: UUID,
+    project_update: ProjectUpdate,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    service = ProjectService(db)
+    project = service.get_project(project_id)
+    if not project:
+        raise HTTPException(status_code=404, detail="Project not found")
+    if project.created_by != user_id:
+        raise HTTPException(status_code=403, detail="Not authorized to update this project")
+    
+    updated_project = service.update_project(
+        project_id,
+        name=project_update.name,
+        description=project_update.description,
+        agent_voice=project_update.agent_voice,
+        agent_compliance=project_update.agent_compliance,
+        agent_analytics=project_update.agent_analytics,
+        agent_sales=project_update.agent_sales,
+        agent_config=project_update.agent_config
+    )
+    return updated_project
 
 @router.post("/", response_model=ProjectResponse)
 def create_project(
@@ -95,7 +121,16 @@ def create_project(
     db: Session = Depends(get_db)
 ):
     service = ProjectService(db)
-    return service.create_project(user_id, project.name, project.description)
+    return service.create_project(
+        user_id, 
+        project.name, 
+        project.description,
+        agent_voice=project.agent_voice,
+        agent_compliance=project.agent_compliance,
+        agent_analytics=project.agent_analytics,
+        agent_sales=project.agent_sales,
+        agent_config=project.agent_config
+    )
 
 @router.get("/", response_model=List[ProjectResponse])
 def get_projects(

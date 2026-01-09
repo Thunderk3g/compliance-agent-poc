@@ -26,6 +26,8 @@ class Submission(Base):
 
     # Relationships
     compliance_checks = relationship("ComplianceCheck", back_populates="submission", cascade="all, delete-orphan")
+    voice_results = relationship("VoiceResult", back_populates="submission", cascade="all, delete-orphan")
+    analytics_results = relationship("AnalyticsResult", back_populates="submission", cascade="all, delete-orphan")
     submitter = relationship("User")
     project = relationship("Project", back_populates="submissions")
     

@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 import logging
 from .config import settings
 from .api.routes import submissions, compliance, dashboard, admin, preprocessing, onboarding, projects
+from .api.routes import voice, analytics, chat  # Multi-Agent System Routes
+from .api.routes import voice_reports, analytics_reports  # Multi-Agent Report Routes
 from .services.llm_service import llm_service
 
 # Configure logging
@@ -71,6 +73,15 @@ app.include_router(admin.router)  # Phase 2: Admin routes for rule management
 app.include_router(preprocessing.router)  # Phase 3: Chunked content processing
 app.include_router(onboarding.router)  # Adaptive Engine: User onboarding
 app.include_router(projects.router)  # Phase 1: Project System
+
+# Multi-Agent System Routes
+app.include_router(voice.router)      # Voice Audit Agent
+app.include_router(analytics.router)  # BI Reasoning Agent
+app.include_router(chat.router)       # Sales & Underwriting Agent
+
+# Multi-Agent Report Routes
+app.include_router(voice_reports.router)      # Voice Reports API
+app.include_router(analytics_reports.router)  # Analytics Reports API
 
 
 # Health check

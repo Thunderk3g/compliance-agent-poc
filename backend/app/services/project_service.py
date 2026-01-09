@@ -8,14 +8,64 @@ class ProjectService:
     def __init__(self, db: Session):
         self.db = db
 
-    def create_project(self, user_id: UUID, name: str, description: str = None) -> Project:
+    def create_project(
+        self, 
+        user_id: UUID, 
+        name: str, 
+        description: str = None,
+        agent_voice: bool = False,
+        agent_compliance: bool = True,
+        agent_analytics: bool = False,
+        agent_sales: bool = False,
+        agent_config: dict = None
+    ) -> Project:
         """Create a new project for a user."""
         project = Project(
             name=name,
             description=description,
-            created_by=user_id
+            created_by=user_id,
+            agent_voice=agent_voice,
+            agent_compliance=agent_compliance,
+            agent_analytics=agent_analytics,
+            agent_sales=agent_sales,
+            agent_config=agent_config
         )
         self.db.add(project)
+        self.db.commit()
+        self.db.refresh(project)
+        return project
+
+    def update_project(
+        self, 
+        project_id: UUID, 
+        name: Optional[str] = None,
+        description: Optional[str] = None,
+        agent_voice: Optional[bool] = None,
+        agent_compliance: Optional[bool] = None,
+        agent_analytics: Optional[bool] = None,
+        agent_sales: Optional[bool] = None,
+        agent_config: Optional[dict] = None
+    ) -> Optional[Project]:
+        """Update an existing project."""
+        project = self.get_project(project_id)
+        if not project:
+            return None
+        
+        if name is not None:
+            project.name = name
+        if description is not None:
+            project.description = description
+        if agent_voice is not None:
+            project.agent_voice = agent_voice
+        if agent_compliance is not None:
+            project.agent_compliance = agent_compliance
+        if agent_analytics is not None:
+            project.agent_analytics = agent_analytics
+        if agent_sales is not None:
+            project.agent_sales = agent_sales
+        if agent_config is not None:
+            project.agent_config = agent_config
+            
         self.db.commit()
         self.db.refresh(project)
         return project

@@ -3,10 +3,13 @@ import { AnimatePresence, motion } from "framer-motion";
 import {
   ArrowLeft,
   ArrowRight,
+  BarChart3,
   Building2,
   CheckCircle,
   FileText,
-  FolderPlus,
+  Headset,
+  Mic,
+  ShieldCheck,
   Sparkles,
   Target,
   Trash2,
@@ -61,6 +64,37 @@ const INDUSTRIES = [
   },
 ];
 
+const AGENTS = [
+  {
+    id: "agent_compliance",
+    name: "Regulatory Compliance",
+    description: "Analyze marketing content & documents against IRDAI/Brand rules.",
+    icon: ShieldCheck,
+    required: true,
+  },
+  {
+    id: "agent_voice",
+    name: "Voice Audit",
+    description: "Transcribe call recordings and detect sales mis-selling/violations.",
+    icon: Mic,
+    required: false,
+  },
+  {
+    id: "agent_analytics",
+    name: "BI Reasoning",
+    description: "Executive narratives, trend detection, and anomaly analysis.",
+    icon: BarChart3,
+    required: false,
+  },
+  {
+    id: "agent_sales",
+    name: "Sales & Underwriting",
+    description: "Bilingual sales bot (Eng/Hin) with real-time risk assessment.",
+    icon: Headset,
+    required: false,
+  },
+];
+
 interface Rule {
   id: string;
   rule_text: string;
@@ -83,6 +117,10 @@ export default function Onboarding() {
     brand_guidelines: "",
     project_name: "",
     project_description: "",
+    agent_voice: false,
+    agent_compliance: true,
+    agent_analytics: false,
+    agent_sales: false,
   });
 
   // Project & Rules state
@@ -95,6 +133,7 @@ export default function Onboarding() {
     { label: "Industry", description: "Select your industry" },
     { label: "Brand", description: "Brand information" },
     { label: "Project", description: "Create project" },
+    { label: "Agents", description: "Specialist agents" },
     { label: "Upload", description: "Add guidelines" },
     { label: "Review", description: "Review rules" },
   ];
@@ -102,8 +141,8 @@ export default function Onboarding() {
   const handleNext = async () => {
     setError(null);
 
-    // Step 3 -> 4: Create Project
-    if (step === 3) {
+    // Step 4 -> 5: Create Project (Now after Agents selection)
+    if (step === 4) {
       setLoading(true);
       try {
         const projectRes = await api.createProject({
@@ -111,7 +150,11 @@ export default function Onboarding() {
           description:
             formData.project_description ||
             `${formData.brand_name} - ${formData.industry} project`,
-        });
+          agent_voice: formData.agent_voice,
+          agent_compliance: formData.agent_compliance,
+          agent_analytics: formData.agent_analytics,
+          agent_sales: formData.agent_sales,
+        } as any);
 
         setCreatedProjectId(projectRes.data.id);
         setStep(step + 1);
@@ -123,8 +166,8 @@ export default function Onboarding() {
       return;
     }
 
-    // Step 4 -> 5: Upload & Generate Rules
-    if (step === 4 && uploadedFile && createdProjectId) {
+    // Step 5 -> 6: Upload & Generate Rules
+    if (step === 5 && uploadedFile && createdProjectId) {
       setIsGeneratingRules(true);
       setError(null);
       try {
@@ -154,7 +197,7 @@ export default function Onboarding() {
       return;
     }
 
-    if (step < 5) {
+    if (step < 6) {
       setStep(step + 1);
     }
   };
@@ -185,8 +228,10 @@ export default function Onboarding() {
       case 3:
         return formData.project_name.trim() !== "";
       case 4:
-        return uploadedFile !== null;
+        return true; // Agents step is always valid
       case 5:
+        return uploadedFile !== null;
+      case 6:
         return true;
       default:
         return false;
@@ -346,10 +391,10 @@ export default function Onboarding() {
               </motion.div>
             )}
 
-            {/* Step 3: Create Project */}
-            {step === 3 && (
+            {/* Step 4: Specialist Agents Selection */}
+            {step === 4 && (
               <motion.div
-                key="step3"
+                key="step4"
                 initial={{ opacity: 0, x: 20 }}
                 animate={{ opacity: 1, x: 0 }}
                 exit={{ opacity: 0, x: -20 }}
@@ -357,56 +402,59 @@ export default function Onboarding() {
                 className="space-y-6"
               >
                 <div className="flex items-center gap-3">
-                  <FolderPlus className="w-8 h-8" />
+                  <BarChart3 className="w-8 h-8" />
                   <div>
-                    <h2 className="text-2xl font-bold">
-                      Create Your First Project
-                    </h2>
+                    <h2 className="text-2xl font-bold">Choose Specialized Agents</h2>
                     <p className="text-muted-foreground">
-                      Organize your compliance work by project
+                      Power your project with AI specialists
                     </p>
                   </div>
                 </div>
 
-                <div className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="project_name">Project Name *</Label>
-                    <Input
-                      id="project_name"
-                      value={formData.project_name}
-                      onChange={(e) =>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {AGENTS.map((agent) => (
+                    <button
+                      key={agent.id}
+                      onClick={() =>
+                        !agent.required &&
                         setFormData({
                           ...formData,
-                          project_name: e.target.value,
+                          [agent.id as keyof typeof formData]: !formData[agent.id as keyof typeof formData],
                         })
                       }
-                      placeholder="e.g., Q1 2024 Campaign"
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="project_description">
-                      Description (Optional)
-                    </Label>
-                    <Textarea
-                      id="project_description"
-                      value={formData.project_description}
-                      onChange={(e) =>
-                        setFormData({
-                          ...formData,
-                          project_description: e.target.value,
-                        })
-                      }
-                      placeholder="Brief description of this project..."
-                      rows={4}
-                    />
-                  </div>
+                      className={`p-6 rounded border-2 transition-all text-left relative ${
+                        formData[agent.id as keyof typeof formData]
+                          ? "border-foreground bg-accent/50"
+                          : "border-border hover:border-foreground/30"
+                      } ${agent.required ? "cursor-default opacity-80" : "cursor-pointer"}`}
+                    >
+                      <div className="flex items-start gap-4">
+                        <div className={`p-2 rounded ${formData[agent.id as keyof typeof formData] ? 'bg-primary/20 text-primary' : 'bg-muted text-muted-foreground'}`}>
+                          <agent.icon className="w-6 h-6" />
+                        </div>
+                        <div className="flex-1">
+                          <h3 className="font-semibold mb-1 flex items-center gap-2">
+                            {agent.name}
+                            {agent.required && (
+                              <span className="text-[10px] bg-primary/20 text-primary px-1.5 py-0.5 rounded uppercase tracking-wider">Required</span>
+                            )}
+                          </h3>
+                          <p className="text-xs text-muted-foreground leading-relaxed">
+                            {agent.description}
+                          </p>
+                        </div>
+                        {formData[agent.id as keyof typeof formData] && (
+                          <CheckCircle className="w-5 h-5 text-primary flex-shrink-0" />
+                        )}
+                      </div>
+                    </button>
+                  ))}
                 </div>
               </motion.div>
             )}
 
-            {/* Step 4: Upload Guidelines */}
-            {step === 4 && (
+            {/* Step 5: Upload Guidelines */}
+            {step === 5 && (
               <motion.div
                 key="step4"
                 initial={{ opacity: 0, x: 20 }}

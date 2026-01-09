@@ -2,10 +2,13 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import {
     ArrowLeft, FileText, Upload, Shield, AlertTriangle,
-    CheckCircle2, Plus, File, Loader2, Trash2, Filter, Search, ArrowRight, X, Sparkles, MessageSquare
+    CheckCircle2, Plus, File, Loader2, Trash2, Filter, Search, ArrowRight, X, Sparkles, MessageSquare,
+    Mic, BarChart3, Settings
 } from 'lucide-react';
 import { api } from '../lib/api';
 import { Results } from './Results';
+import { VoiceReportsView } from '../components/VoiceReportsView';
+import { AnalyticsReportsView } from '../components/AnalyticsReportsView';
 import { Project, Guideline, Submission } from '../lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -29,7 +32,7 @@ export default function ProjectDetail() {
     const [submissions, setSubmissions] = useState<Submission[]>([]);
     const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState<'rules' | 'analysis'>('rules');
+    const [activeTab, setActiveTab] = useState<'rules' | 'analysis' | 'voice' | 'analytics' | 'settings'>('rules');
     const [isUploading, setIsUploading] = useState(false);
     const [uploadSuccess, setUploadSuccess] = useState<string | null>(null);
     const [actionLoading, setActionLoading] = useState<Record<string, boolean>>({});
@@ -423,6 +426,46 @@ export default function ProjectDetail() {
                         <FileText className="w-4 h-4 inline-block mr-2" />
                         Content Analysis
                     </button>
+                    {project.agent_voice && (
+                        <button
+                            onClick={() => setActiveTab('voice')}
+                            className={`
+                                whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors
+                                ${activeTab === 'voice'
+                                    ? 'border-blue-500 text-blue-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}
+                            `}
+                        >
+                            <Mic className="w-4 h-4 inline-block mr-2" />
+                            Voice Audit
+                        </button>
+                    )}
+                    {project.agent_analytics && (
+                        <button
+                            onClick={() => setActiveTab('analytics')}
+                            className={`
+                                whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors
+                                ${activeTab === 'analytics'
+                                    ? 'border-blue-500 text-blue-600'
+                                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}
+                            `}
+                        >
+                            <BarChart3 className="w-4 h-4 inline-block mr-2" />
+                            BI Analytics
+                        </button>
+                    )}
+                    <button
+                        onClick={() => setActiveTab('settings')}
+                        className={`
+                            whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition-colors
+                            ${activeTab === 'settings'
+                                ? 'border-blue-500 text-blue-600'
+                                : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}
+                        `}
+                    >
+                        <Settings className="w-4 h-4 inline-block mr-2" />
+                        Settings
+                    </button>
                 </nav>
             </div>
 
@@ -777,6 +820,112 @@ export default function ProjectDetail() {
                                 </div>
                             </>
                         )}
+                    </div>
+                )}
+
+                {activeTab === 'voice' && project.agent_voice && (
+                    <div className="animate-slide-up">
+                        <VoiceReportsView projectId={id!} />
+                    </div>
+                )}
+
+                {activeTab === 'analytics' && project.agent_analytics && (
+                    <div className="animate-slide-up">
+                        <AnalyticsReportsView projectId={id!} />
+                    </div>
+                )}
+
+                {activeTab === 'settings' && (
+                    <div className="animate-slide-up space-y-6">
+                        <Card>
+                            <CardHeader>
+                                <CardTitle>Project Settings</CardTitle>
+                                <CardDescription>Manage project details and active agents</CardDescription>
+                            </CardHeader>
+                            <CardContent className="space-y-6">
+                                <div className="space-y-4">
+                                    <div>
+                                        <label className="block text-sm font-medium text-gray-700 mb-1">Active Agents</label>
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                            <div className="flex items-center justify-between p-4 border rounded-xl bg-white shadow-sm hover:border-blue-200 transition-colors">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
+                                                        <Shield className="w-5 h-5" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-semibold text-gray-900">Compliance Agent</div>
+                                                        <div className="text-xs text-gray-500">Core regulatory check</div>
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    onClick={async () => {
+                                                        try {
+                                                            const updated = await api.updateProject(id!, { agent_compliance: !project.agent_compliance });
+                                                            setProject(updated.data);
+                                                        } catch (e) {
+                                                            console.error("Update failed", e);
+                                                        }
+                                                    }}
+                                                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${project.agent_compliance ? 'bg-blue-600' : 'bg-gray-200'}`}
+                                                >
+                                                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${project.agent_compliance ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                </button>
+                                            </div>
+
+                                            <div className="flex items-center justify-between p-4 border rounded-xl bg-white shadow-sm hover:border-purple-200 transition-colors">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
+                                                        <Mic className="w-5 h-5" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-semibold text-gray-900">Voice Agent</div>
+                                                        <div className="text-xs text-gray-500">Call transcript analysis</div>
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    onClick={async () => {
+                                                        try {
+                                                            const updated = await api.updateProject(id!, { agent_voice: !project.agent_voice });
+                                                            setProject(updated.data);
+                                                        } catch (e) {
+                                                            console.error("Update failed", e);
+                                                        }
+                                                    }}
+                                                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-600 focus:ring-offset-2 ${project.agent_voice ? 'bg-purple-600' : 'bg-gray-200'}`}
+                                                >
+                                                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${project.agent_voice ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                </button>
+                                            </div>
+
+                                            <div className="flex items-center justify-between p-4 border rounded-xl bg-white shadow-sm hover:border-green-200 transition-colors">
+                                                <div className="flex items-center gap-3">
+                                                    <div className="p-2 bg-green-50 text-green-600 rounded-lg">
+                                                        <BarChart3 className="w-5 h-5" />
+                                                    </div>
+                                                    <div>
+                                                        <div className="font-semibold text-gray-900">Analytics Agent</div>
+                                                        <div className="text-xs text-gray-500">BI data insights</div>
+                                                    </div>
+                                                </div>
+                                                <button 
+                                                    onClick={async () => {
+                                                        try {
+                                                            const updated = await api.updateProject(id!, { agent_analytics: !project.agent_analytics });
+                                                            setProject(updated.data);
+                                                        } catch (e) {
+                                                            console.error("Update failed", e);
+                                                        }
+                                                    }}
+                                                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2 ${project.agent_analytics ? 'bg-green-600' : 'bg-gray-200'}`}
+                                                >
+                                                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${project.agent_analytics ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </CardContent>
+                        </Card>
                     </div>
                 )}
             </div>

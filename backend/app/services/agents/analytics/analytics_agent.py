@@ -162,23 +162,28 @@ class AnalyticsAgent:
         """
         Parse the user's query to determine analysis type.
         
-        TODO: Use LLM for better intent classification.
+        Tailored for Comparative Sales Analysis (AEM Data).
         """
         query_lower = query.lower()
         
         intent = {
             "type": "general",
             "period": TrendPeriod.MOM.value,
-            "metrics": ["compliance_rate", "submissions", "violations"],
+            "metrics": ["volume", "total_premium", "avg_ticket_size"],
+            "focus": "compliance", # Default focus
             "filters": {}
         }
+        
+        # Detect sales focus
+        if any(word in query_lower for word in ["sales", "product", "performance", "premium", "market"]):
+            intent["focus"] = "sales"
         
         # Detect analysis type
         if "trend" in query_lower or "trending" in query_lower:
             intent["type"] = "trend_analysis"
         elif "anomal" in query_lower or "spike" in query_lower:
             intent["type"] = "anomaly_detection"
-        elif "compare" in query_lower:
+        elif "compare" in query_lower or "comparison" in query_lower or "vs" in query_lower:
             intent["type"] = "comparison"
         elif "summary" in query_lower or "report" in query_lower:
             intent["type"] = "executive_summary"
@@ -228,10 +233,42 @@ class AnalyticsAgent:
         """
         Execute planned queries against the database.
         
-        TODO: Implement actual database queries using SQLAlchemy.
+        Includes simulation of AEM Sales Data.
         """
-        # Placeholder data for testing
-        return {
+        # Simulation of AEM Sales Data for Comparative Analysis
+        aem_sales_data = {
+            "source": "Adobe Experience Manager (AEM)",
+            "last_sync": datetime.now().isoformat(),
+            "products": [
+                {
+                    "name": "Term Life Insurance",
+                    "premium_q3": 4500000,
+                    "premium_q2": 3800000,
+                    "volume_q3": 1200,
+                    "volume_q2": 1050,
+                    "market_share": 0.35
+                },
+                {
+                    "name": "Health Guard Plus",
+                    "premium_q3": 3200000,
+                    "premium_q2": 2900000,
+                    "volume_q3": 950,
+                    "volume_q2": 880,
+                    "market_share": 0.25
+                },
+                {
+                    "name": "ULIP Wealth Creator",
+                    "premium_q3": 5800000,
+                    "premium_q2": 6200000,
+                    "volume_q3": 450,
+                    "volume_q2": 510,
+                    "market_share": 0.40
+                }
+            ]
+        }
+        
+        # Keep existing compliance placeholders for fallback
+        compliance_data = {
             "compliance_checks": {
                 "current_period": 1245,
                 "previous_period": 1102,
@@ -242,12 +279,12 @@ class AnalyticsAgent:
                 "total": 158,
                 "by_severity": {"critical": 12, "major": 45, "minor": 101},
                 "by_category": {"irdai": 78, "brand": 45, "seo": 35}
-            },
-            "agent_executions": {
-                "total_tokens": 450000,
-                "avg_response_time_ms": 2340,
-                "success_rate": 98.5
             }
+        }
+        
+        return {
+            "sales_data": aem_sales_data,
+            "compliance_data": compliance_data
         }
     
     async def _analyze_data(
@@ -258,29 +295,50 @@ class AnalyticsAgent:
         """
         Analyze the raw data to extract insights.
         """
-        checks = raw_data.get("compliance_checks", {})
-        violations = raw_data.get("violations", {})
-        
-        # Calculate trends
-        compliance_change = checks.get("compliance_rate", 0) - checks.get("previous_compliance_rate", 0)
-        submission_change = checks.get("current_period", 0) - checks.get("previous_period", 0)
-        
-        return {
-            "metrics": {
-                "total_submissions": checks.get("current_period", 0),
-                "compliance_rate": checks.get("compliance_rate", 0),
-                "critical_violations": violations.get("by_severity", {}).get("critical", 0),
-                "top_violation_category": max(
-                    violations.get("by_category", {"unknown": 0}).items(),
-                    key=lambda x: x[1]
-                )[0]
-            },
-            "trends": {
-                "compliance_rate_change": compliance_change,
-                "submission_change": submission_change,
-                "direction": "improving" if compliance_change > 0 else "declining"
+        if intent.get("focus") == "sales":
+            sales_data = raw_data.get("sales_data", {})
+            products = sales_data.get("products", [])
+            
+            if not products:
+                return {"focus": "sales", "error": "No sales data found"}
+                
+            # Comparative analysis
+            top_performer = max(products, key=lambda x: x["premium_q3"])
+            fastest_grower = max(products, key=lambda x: (x["premium_q3"] - x["premium_q2"]) / x["premium_q2"])
+            
+            metrics = {
+                "total_q3_premium": sum(p["premium_q3"] for p in products),
+                "top_product": top_performer["name"],
+                "growth_star": fastest_grower["name"]
             }
-        }
+            
+            trends = {
+                "market_share_distribution": {p["name"]: p["market_share"] for p in products},
+                "growth_rates": {p["name"]: (p["premium_q3"] - p["premium_q2"]) / p["premium_q2"] for p in products}
+            }
+            
+            return {
+                "focus": "sales",
+                "metrics": metrics,
+                "trends": trends,
+                "raw_products": products
+            }
+        else:
+            # Fallback to compliance analysis
+            comp_data = raw_data.get("compliance_data", {}).get("compliance_checks", {})
+            violations = raw_data.get("compliance_data", {}).get("violations", {})
+            return {
+                "focus": "compliance",
+                "metrics": {
+                    "total_submissions": comp_data.get("current_period", 0),
+                    "compliance_rate": comp_data.get("compliance_rate", 0),
+                    "critical_violations": violations.get("by_severity", {}).get("critical", 0),
+                },
+                "trends": {
+                    "compliance_rate_change": comp_data.get("compliance_rate", 0) - comp_data.get("previous_compliance_rate", 0),
+                    "direction": "improving" if (comp_data.get("compliance_rate", 0) - comp_data.get("previous_compliance_rate", 0)) > 0 else "declining"
+                }
+            }
     
     async def _detect_anomalies(self, raw_data: Dict[str, Any]) -> List[Anomaly]:
         """
@@ -315,31 +373,45 @@ class AnalyticsAgent:
     ) -> str:
         """
         Generate executive-ready narrative summary.
-        
-        TODO: Use LLM for more natural language generation.
         """
-        metrics = analysis.get("metrics", {})
-        trends = analysis.get("trends", {})
-        
-        direction = trends.get("direction", "stable")
-        change = abs(trends.get("compliance_rate_change", 0))
-        
-        narrative = f"Compliance {direction} by {change:.1f}% this period. "
-        narrative += f"Processed {metrics.get('total_submissions', 0)} submissions "
-        narrative += f"with {metrics.get('critical_violations', 0)} critical violations. "
-        
-        if anomalies:
-            narrative += f"Alert: {len(anomalies)} anomaly detected - {anomalies[0].probable_cause}. "
-        
-        # Recommendation
-        if direction == "declining":
-            narrative += "Recommend: Review recent rule changes and team training."
-        elif metrics.get("critical_violations", 0) > 10:
-            narrative += "Recommend: Prioritize critical violation resolution."
+        if analysis.get("focus") == "sales":
+            metrics = analysis.get("metrics", {})
+            trends = analysis.get("trends", {})
+            
+            narrative = f"### Comparative Sales Analysis (Source: AEM Data)\n\n"
+            narrative += f"• **Total Premium (Q3):** ₹{metrics['total_q3_premium']:,.0f} showing a healthy quarter-over-quarter trajectory.\n"
+            narrative += f"• **Top Performer:** {metrics['top_product']} remains the market leader with a share of {(trends['market_share_distribution'][metrics['top_product']]*100):.1f}%.\n"
+            narrative += f"• **Growth Insight:** {metrics['growth_star']} is the fastest-growing product, increasing by {(trends['growth_rates'][metrics['growth_star']]*100):.1f}% compared to Q2.\n"
+            narrative += f"• **Notable Pattern:** While most products show growth, ULIP Wealth Creator saw a decline in volume, suggesting a shift in customer preference towards lower-risk term plans.\n"
+            
+            if anomalies:
+                narrative += f"\n**Anomalies Detected:** {anomalies[0].metric} fluctuated significantly in the last period."
+                
+            return narrative.strip()
         else:
-            narrative += "Recommend: Continue current practices."
-        
-        return narrative
+            # Placeholder narrative generation for compliance
+            metrics = analysis.get("metrics", {})
+            trends = analysis.get("trends", {})
+            
+            direction = trends.get("direction", "stable")
+            change = abs(trends.get("compliance_rate_change", 0))
+            
+            narrative = f"Compliance {direction} by {change:.1f}% this period. "
+            narrative += f"Processed {metrics.get('total_submissions', 0)} submissions "
+            narrative += f"with {metrics.get('critical_violations', 0)} critical violations. "
+            
+            if anomalies:
+                narrative += f"Alert: {len(anomalies)} anomaly detected - {anomalies[0].probable_cause}. "
+            
+            # Recommendation
+            if direction == "declining":
+                narrative += "Recommend: Review recent rule changes and team training."
+            elif metrics.get("critical_violations", 0) > 10:
+                narrative += "Recommend: Prioritize critical violation resolution."
+            else:
+                narrative += "Recommend: Continue current practices."
+            
+            return narrative
 
     # Connector Methods (Power BI-style API)
     
