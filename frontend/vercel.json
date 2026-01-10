@@ -2,7 +2,15 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "http://diwakaradhikari.info:8000/api/:path*"
+      "destination": "https://acid-respect-boulder-brothers.trycloudflare.com/api/:path*"
+    },
+    {
+      "source": "/graphql",
+      "destination": "https://acid-respect-boulder-brothers.trycloudflare.com/graphql"
+    },
+    {
+      "source": "/((?!api|graphql|_next|static|favicon.ico).*)",
+      "destination": "/index.html"
     }
   ]
 }

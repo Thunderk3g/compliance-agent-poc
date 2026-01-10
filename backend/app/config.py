@@ -20,10 +20,15 @@ class Settings(BaseSettings):
     # ollama_timeout: int = 30
     # ollama_max_retries: int = 3
 
-    # CORS
+    # CORS - Allow frontend origins
     api_cors_origins: List[str] = [
         "http://localhost:5173",
         "http://127.0.0.1:5173",
+        "http://localhost:3000",
+        "https://compliance-agent-poc.vercel.app",
+        "https://*.vercel.app",
+        "https://acid-respect-boulder-brothers.trycloudflare.com",
+        "https://*.trycloudflare.com",
     ]
 
     # Application
