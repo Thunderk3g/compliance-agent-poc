@@ -498,5 +498,34 @@ Provide the refined rule text and updated keywords. Be specific and actionable."
             return {"success": False, "error": str(e)}
 
 
+
+    def get_active_rules(self, db: Session, project_id: Optional[uuid.UUID] = None) -> Dict[str, List[Rule]]:
+        """
+        Load top active rules per category, filtered by project.
+        Acts as the 'Teacher' providing the curriculum for agents.
+        """
+        query = db.query(Rule).filter(Rule.is_active == True)
+        
+        if project_id:
+            query = query.filter(Rule.project_id == project_id)
+        else:
+            query = query.filter(Rule.project_id.is_(None))
+            
+        rules = query.all()
+
+        # Sort by severity weight
+        severity_order = {"critical": 4, "high": 3, "medium": 2, "low": 1}
+        rules.sort(key=lambda r: severity_order.get(r.severity, 0), reverse=True)
+
+        grouped = {"irdai": [], "brand": [], "seo": []}
+
+        for rule in rules:
+            if rule.category not in grouped:
+                grouped[rule.category] = []
+            
+            grouped[rule.category].append(rule)
+
+        return grouped
+
 # Singleton instance
 rule_generator_service = RuleGeneratorService()

@@ -17,6 +17,7 @@ class Rule(Base):
     pattern = Column(String(1000))  # Optional regex
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    rule_metadata = Column(JSONB, nullable=True, comment="Flexible metadata for rule context (e.g. source URL, version)")
 
     # Phase 2: Dynamic rule generation fields
     points_deduction = Column(

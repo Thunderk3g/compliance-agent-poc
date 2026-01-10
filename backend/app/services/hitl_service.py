@@ -4,7 +4,8 @@ from uuid import UUID
 from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 
-from .agents.orchestration import compliance_graph, GraphContext
+from .agents.orchestrator import orchestrator
+from .agents.graph.context import GraphContext
 from .compliance_engine import ComplianceEngine
 from ..models.submission import Submission
 from ..models.compliance_state import ComplianceState
@@ -43,14 +44,14 @@ class HITLService:
             # Depending on how the graph is paused (interrupt_before 'human_review'), 
             # updating state here will be applied before 'human_review' runs.
             
-            await compliance_graph.aupdate_state(
+            await orchestrator.update_state(
                 config, 
                 {"user_feedback": f"Action: {action}. Feedback: {feedback}"}
             )
             
             # 3. Resume Execution
             # invoke(None) continues from the interruption point.
-            final_state_dict = await compliance_graph.ainvoke(None, config=config)
+            final_state_dict = await orchestrator.run_workflow(None, config=config)
             
             logger.info("LangGraph execution completed (Resumed).")
             

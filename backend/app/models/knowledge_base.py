@@ -17,7 +17,7 @@ class KnowledgeBase(Base):
     regulation_name = Column(String(255), nullable=False, index=True)
     document_title = Column(String(500), nullable=True)
     content = Column(Text, nullable=False)
-    metadata = Column(JSONB, nullable=True)
+    kb_metadata = Column(JSONB, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), 
                         onupdate=func.now())
@@ -32,5 +32,5 @@ class KnowledgeBase(Base):
             "regulation_name": self.regulation_name,
             "document_title": self.document_title,
             "content": self.content[:500] + "..." if len(self.content) > 500 else self.content,
-            "metadata": self.metadata
+            "metadata": self.kb_metadata
         }

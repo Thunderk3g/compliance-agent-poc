@@ -10,16 +10,38 @@ export const apiClient = axios.create({
   },
 });
 
-// Add request interceptor to inject User ID
-apiClient.interceptors.request.use((config) => {
+import { auth } from "./firebase";
+
+// Add request interceptor to inject User ID and Token
+apiClient.interceptors.request.use(async (config) => {
   let userId = localStorage.getItem("userId");
-  if (!userId || userId === "demo-user-id") {
-    // Generate or use default valid UUID for demo
-    userId = "550e8400-e29b-41d4-a716-446655440000";
-    localStorage.setItem("userId", userId);
+  
+  // Try to get Firebase Token if user is logged in
+  if (auth.currentUser) {
+    try {
+      const token = await auth.currentUser.getIdToken();
+      config.headers.Authorization = `Bearer ${token}`;
+      // Backend expects X-User-Id to match the token's UID
+      config.headers["X-User-Id"] = auth.currentUser.uid;
+      userId = auth.currentUser.uid;
+    } catch (error) {
+      console.error("[API] Failed to get token", error);
+    }
   }
-  console.log("[API] Injecting X-User-Id:", userId);
-  config.headers["X-User-Id"] = userId;
+
+  if (!userId || userId === "demo-user-id") {
+    // Generate or use default valid UUID for demo if not logged in
+    userId = "550e8400-e29b-41d4-a716-446655440000";
+    if (!auth.currentUser) {
+        localStorage.setItem("userId", userId);
+    }
+  }
+  
+  if (!config.headers["X-User-Id"]) {
+      console.log("[API] Injecting Fallback X-User-Id:", userId);
+      config.headers["X-User-Id"] = userId;
+  }
+  
   return config;
 });
 

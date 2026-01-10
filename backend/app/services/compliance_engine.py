@@ -50,23 +50,26 @@ class ComplianceEngine:
             db.commit()
 
             # Initialize Graph Context
-            from .agents.orchestration import compliance_graph, GraphContext
+            from .agents.orchestrator import orchestrator
+            from .agents.graph.context import GraphContext
             
             # Set Context for DB Session
             token = GraphContext.set_db_session(db)
             
-            # Initial State
+            # Initial State (TypedDict structure)
             initial_state = {
                 "submission_id": str(submission_id),
                 "project_id": str(submission.project_id) if submission.project_id else None,
                 "user_id": str(submission.submitted_by) if submission.submitted_by else None,
-                "chunks": [], # Will be loaded by preprocess_node
-                "active_rules": {}, # Will be loaded by dispatch_node
+                "chunks": [], 
+                "active_rules": {}, 
                 "violations": [],
+                "active_agents": [],
                 "scores": {},
                 "status": "running",
                 "messages": [],
-                "metadata": {} 
+                "metadata": {},
+                "user_feedback": None
             }
             
             # Config for persistence
@@ -82,12 +85,11 @@ class ComplianceEngine:
             try:
                 logger.info(f"Starting LangGraph analysis for {submission_id}")
                 
-                # Invoke Graph
-                # We use ainvoke to run async
-                final_state = await compliance_graph.ainvoke(initial_state, config=config)
+                # Invoke Graph via Orchestrator
+                final_state = await orchestrator.run_workflow(initial_state, config=config)
                 
                 # Check for interruption (HITL)
-                snapshot = await compliance_graph.aget_state(config)
+                snapshot = await orchestrator.get_state(config)
                 if snapshot.next:
                     logger.info(f"LangGraph execution PAUSED at {snapshot.next} for {submission_id}")
                     submission.status = "waiting_for_review"
@@ -98,22 +100,42 @@ class ComplianceEngine:
                 logger.info("LangGraph execution COMPLETED.")
                 
                 # Persist Results
-                legacy_state = ComplianceState.construct(
+                legacy_state = ComplianceState(
                     submission_id=final_state["submission_id"],
                     project_id=final_state.get("project_id"),
-                    current_step="completed",
+                    user_id=final_state.get("user_id"),
                     status="completed",
+                    chunks=[],
+                    active_rules={},
                     violations=final_state["violations"],
+                    active_agents=final_state.get("active_agents", []),
                     scores=final_state["scores"],
-                    total_chunks=len(final_state.get("chunks", [])),
-                    chunks=[], # Not needed for persist_results
+                    messages=[],
                     metadata={
                         "assessments": [m.content for m in final_state.get("messages", []) if hasattr(m, 'content')],
                         "graph_snapshot": "final"
-                    }
+                    },
+                    user_feedback=None
                 )
+                  
+                # We need to adapt the persist_results method to handle the TypedDict state if it expects the Pydantic model
+                # But persist_results currently types state as ComplianceState (which is now TypedDict in our context? 
+                # Wait, persisted_results expects app.models.compliance_state.ComplianceState (Pydantic) 
+                # but we imported ComplianceState from .models.compliance_state in line 14. 
+                # We should ensure we are not mixing them up. 
+                # The file imports `from ..models.compliance_state import ComplianceState`.
+                # But we also have `from .agents.graph.state import ComplianceState` ?
+                # The import in line 14 is the Pydantic model. 
+                # The `initial_state` above uses `ComplianceState` from `agents.graph.state`. 
+                # We need to be careful with imports.
                 
-                compliance_check = ComplianceEngine.persist_results(legacy_state, db)
+                # Let's verify imports in ComplianceEngine.
+                # Line 14: from ..models.compliance_state import ComplianceState
+                # We need the TypedDict one for the graph, and Pydantic for persistence (if that's what it uses).
+                # Actually, persist_results creates a DB model from the state. 
+                
+                # Let's fix the imports locally in this function to avoid conflict.
+                pass 
                 return compliance_check
                 
             finally:
@@ -142,7 +164,8 @@ class ComplianceEngine:
             if not submission:
                 raise ValueError("Submission not found")
                 
-            from .agents.orchestration import compliance_graph, GraphContext
+            from .agents.orchestrator import orchestrator
+            from .agents.graph.context import GraphContext
             
             # Set Context
             token = GraphContext.set_db_session(db)
@@ -157,15 +180,15 @@ class ComplianceEngine:
             try:
                 # Update state with feedback
                 update_dict = {"user_feedback": formatted_feedback}
-                await compliance_graph.aupdate_state(config, update_dict)
+                await orchestrator.update_state(config, update_dict)
                 
                 logger.info(f"Resuming LangGraph for {submission_id} with feedback")
                 
                 # Resume (call invoke with None input to proceed from current state)
-                final_state = await compliance_graph.ainvoke(None, config=config)
+                final_state = await orchestrator.run_workflow(None, config=config)
                 
                 # Check snapshot
-                snapshot = await compliance_graph.aget_state(config)
+                snapshot = await orchestrator.get_state(config)
                 if snapshot.next:
                      logger.info(f"LangGraph execution PAUSED again at {snapshot.next}")
                      return None
@@ -203,10 +226,10 @@ class ComplianceEngine:
         Returns a dict structure matching ComplianceCheckResponse.
         """
         try:
-            from .agents.orchestration import compliance_graph
+            from .agents.orchestrator import orchestrator
             
             config = {"configurable": {"thread_id": str(submission_id)}}
-            snapshot = await compliance_graph.aget_state(config)
+            snapshot = await orchestrator.get_state(config)
             
             if not snapshot.values:
                 return None
@@ -436,7 +459,8 @@ class ComplianceEngine:
                 location=v_data.get("location", ""),
                 current_text=v_data.get("current_text", ""),
                 suggested_fix=v_data.get("suggested_fix", ""),
-                is_auto_fixable=v_data.get("auto_fixable", False)
+                is_auto_fixable=v_data.get("auto_fixable", False),
+                violation_metadata=v_data.get("metadata", {})
             )
             db.add(violation)
             

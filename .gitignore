@@ -1,6 +1,8 @@
 # Environment
 .env
 .env.local
+service-account.json
+backend/service-account.json
 
 # Python
 __pycache__/
@@ -56,3 +58,6 @@ docker-compose.override.yml
 
 # Alembic
 backend/migrations/versions/*.pyc
+
+# Cloned Repositories
+reference/

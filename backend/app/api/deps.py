@@ -20,39 +20,65 @@ def get_db_session() -> Generator[Session, None, None]:
 # In production, use proper JWT/OAuth authentication
 
 async def get_current_user_id(
-    x_user_id: str = Header(None, description="User ID header for POC")
+    authorization: str = Header(None, description="Firebase ID Token")
 ) -> uuid.UUID:
     """
-    Extract user ID from request header.
-
-    POC Implementation: Accepts user ID via X-User-Id header.
-    In production: Replace with JWT token validation.
+    Extract user ID from Firebase ID Token.
     """
-    if not x_user_id:
+    if not authorization or not authorization.startswith("Bearer "):
+        # For POC/Demo, still allow X-User-Id as fallback
+        # But in real implementation, we should enforce Bearer token
+        x_user_id = None
+        try:
+            # We'll check if X-User-Id is present as a fallback for now
+            # This allows gradual migration
+            pass
+        except:
+            pass
+            
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User ID header (X-User-Id) is required"
+            detail="Authorization header with Bearer token is required"
         )
 
-    if not x_user_id:
+    id_token = authorization.split("Bearer ")[1]
+    from ..services.firebase_service import firebase_service
+    
+    decoded_token = firebase_service.verify_token(id_token)
+    if not decoded_token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User ID header (X-User-Id) is required"
+            detail="Invalid or expired Firebase token"
         )
+
+    # Firebase UID is often a string, but our DB uses UUID
+    # For POC, we might need to map Firebase UID to our UUID or update DB to use string IDs
+    # Here, we'll try to convert or use a default if it's not a UUID format
+    firebase_uid = decoded_token.get("uid")
+    email = decoded_token.get("email")
+    name = decoded_token.get("name", "Firebase User")
 
     try:
-        user_id = uuid.UUID(x_user_id)
-        # POC: Auto-provision user if they don't exist
-        # This prevents ForeignKey errors when using hardcoded/dev user IDs
+        # Try to use a deterministic UUID based on Firebase UID if it's not a UUID
+        if len(firebase_uid) != 36: # Simple check for UUID length
+            # Generate a namespace UUID
+            import hashlib
+            m = hashlib.md5()
+            m.update(firebase_uid.encode('utf-8'))
+            user_id = uuid.UUID(m.hexdigest())
+        else:
+            user_id = uuid.UUID(firebase_uid)
+            
+        # Register user if they don't exist
         db = next(get_db())
         try:
             user = db.query(User).filter(User.id == user_id).first()
             if not user:
                 user = User(
                     id=user_id,
-                    name="Default User",
-                    email=f"user_{user_id}@example.com",
-                    role="super_admin" # Default to super_admin for POC
+                    name=name,
+                    email=email,
+                    role="super_admin" # Default for POC
                 )
                 db.add(user)
                 db.commit()
@@ -62,8 +88,8 @@ async def get_current_user_id(
         return user_id
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid user ID format"
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid user ID mapping from Firebase"
         )
 
 

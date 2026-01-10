@@ -3,50 +3,32 @@ import { ArrowRight, Calendar, Folder, Plus, Trash2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CreateProjectDialog } from '../components/projects/CreateProjectDialog';
-import { api } from '../lib/api';
-import { Project } from '../lib/types';
+import { useQuery, useMutation } from '@apollo/client';
+import { GET_PROJECTS, DELETE_PROJECT } from '../lib/queries';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function ProjectList() {
-    const [projects, setProjects] = useState<Project[]>([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const { loading, error, data, refetch } = useQuery(GET_PROJECTS);
+    const [deleteProject] = useMutation(DELETE_PROJECT, {
+        onCompleted: () => refetch()
+    });
+    const { logout, currentUser } = useAuth();
     const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
 
-    const fetchProjects = async () => {
-        try {
-            setLoading(true);
-            const response = await api.getProjects();
-            setProjects(response.data);
-            setError(null);
-        } catch (err) {
-            console.error("Failed to load projects:", err);
-            setError("Failed to load projects.");
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const handleDeleteProject = async (e: React.MouseEvent, projectId: string) => {
-        e.preventDefault(); // Prevent navigation
-        e.stopPropagation(); // Stop event bubbling
+        e.preventDefault();
+        e.stopPropagation();
         
         if (!window.confirm("Are you sure you want to delete this project? This action cannot be undone.")) {
             return;
         }
 
         try {
-            await api.deleteProject(projectId);
-            setProjects(projects.filter(p => p.id !== projectId));
-            // Optional: Show success toast if you have a toast system
+            await deleteProject({ variables: { id: projectId } });
         } catch (err) {
             console.error("Failed to delete project:", err);
-            setError("Failed to delete project");
         }
     };
-
-    useEffect(() => {
-        fetchProjects();
-    }, []);
 
     return (
         <div className="space-y-8">
@@ -54,19 +36,28 @@ export default function ProjectList() {
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">Projects</h1>
                     <p className="text-gray-600 mt-2">Manage your compliance workspaces</p>
+                    {currentUser && <p className="text-sm text-blue-600 mt-1">Logged in as: {currentUser.email}</p>}
                 </div>
-                <button
-                    onClick={() => setIsCreateModalOpen(true)}
-                    className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
-                >
-                    <Plus className="w-5 h-5" />
-                    New Project
-                </button>
+                <div className="flex gap-4">
+                    <button
+                        onClick={logout}
+                        className="px-4 py-2 text-gray-700 bg-white border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                        Logout
+                    </button>
+                    <button
+                        onClick={() => setIsCreateModalOpen(true)}
+                        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors shadow-md"
+                    >
+                        <Plus className="w-5 h-5" />
+                        New Project
+                    </button>
+                </div>
             </div>
 
             {error && (
                 <div className="p-4 bg-red-50 text-red-700 rounded-lg border border-red-100">
-                    {error}
+                    {error.message}
                 </div>
             )}
 
@@ -89,7 +80,7 @@ export default function ProjectList() {
                     </button>
 
                     {/* Project Cards */}
-                    {projects?.map((project) => (
+                    {data?.projects?.map((project: any) => (
                         <Link
                             key={project.id}
                             to={`/projects/${project.id}`}
@@ -135,7 +126,7 @@ export default function ProjectList() {
                 </div>
             )}
 
-            {!loading && projects.length === 0 && (
+            {!loading && (!data?.projects || data.projects.length === 0) && (
                 <div className="text-center py-12">
                     <p className="text-gray-500 text-lg">No projects found. Create one to get started!</p>
                 </div>
@@ -144,7 +135,7 @@ export default function ProjectList() {
             <CreateProjectDialog
                 isOpen={isCreateModalOpen}
                 onClose={() => setIsCreateModalOpen(false)}
-                onProjectCreated={fetchProjects}
+                onProjectCreated={refetch}
             />
         </div>
     );

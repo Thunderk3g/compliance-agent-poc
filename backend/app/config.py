@@ -11,6 +11,9 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://generativelanguage.googleapis.com/v1beta/openai/"
     llm_model: str = "gemini-2.0-flash"
 
+    # Redis (LangGraph Persistence)
+    redis_url: str = "redis://compliance-redis:6379"
+
     # Ollama (Commented out for migration)
     # ollama_base_url: str = "http://127.0.0.1:11434"
     # ollama_model: str = "qwen2.5:7b"
@@ -30,6 +33,10 @@ class Settings(BaseSettings):
     # File Upload
     max_upload_size: int = 52428800  # 50MB
     upload_dir: str = "./uploads"
+
+    # Firebase
+    firebase_service_account_path: str = ""
+    firebase_api_key: str = ""
 
     class Config:
         env_file = ".env"

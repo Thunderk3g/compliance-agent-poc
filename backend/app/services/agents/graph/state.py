@@ -5,22 +5,24 @@ from langchain_core.messages import BaseMessage
 class ComplianceState(TypedDict):
     """
     Represents the state of the compliance orchestration graph.
-    Tracking document progress, rules, violations, and scores.
+    Acts as a 'Stateless Reducer' where strictly typed updates are merged.
     """
     submission_id: str
     project_id: Optional[str]
     user_id: Optional[str]
     
-    # Document Content
-    chunks: List[Dict[str, Any]]  # Preprocessed chunks
+    # Document Content (Librarian's Output)
+    chunks: List[Dict[str, Any]]
     
-    # Rules
-    active_rules: Dict[str, List[Dict[str, Any]]] # Serialized rules by category
+    # Rules (Teacher's Output)
+    active_rules: Dict[str, List[Dict[str, Any]]]
     
-    # Analysis Results (Append-only)
-    # Using operator.add to merge lists from parallel branches if we use them, 
-    # or just to accumulate updates.
+    # Analysis Results (Brain's Accumulator)
+    # Using operator.add to append violations from parallel agents
     violations: Annotated[List[Dict[str, Any]], operator.add]
+    
+    # Track which agents were spawned
+    active_agents: Annotated[List[str], operator.add]
     
     # Scoring
     scores: Dict[str, Any]

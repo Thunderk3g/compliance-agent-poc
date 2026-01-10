@@ -68,19 +68,22 @@ async def preprocess_node(state: ComplianceState):
 async def dispatch_node(state: ComplianceState):
     """
     Brain Node: Identifies active rules and determines execution plan.
+    Dynamic Dispatching of Agents.
     """
     logger.info("Node: Dispatch (Brain) running...")
     
     db = GraphContext.get_db_session()
     project_id = state.get("project_id")
     
-    # Load Rules
-    # Using the helper from ComplianceEngine to ensure consistency
-    rules_orm = LegacyEngine._load_active_rules(db, project_id)
+    # Load Rules via Teacher (RuleGeneratorService)
+    from app.services.rule_generator_service import rule_generator_service
+    rules_orm = rule_generator_service.get_active_rules(db, uuid.UUID(project_id) if project_id else None)
     
-    # Serialize for state
+    # Serialize for state & determine agents
     rules_serializable = {}
+    active_agents = []
     active_count = 0
+    
     for cat, r_list in rules_orm.items():
         if r_list:
             rules_serializable[cat] = [
@@ -91,11 +94,13 @@ async def dispatch_node(state: ComplianceState):
                     "severity": r.severity
                 } for r in r_list
             ]
+            active_agents.append(f"agent_{cat}")
             active_count += len(r_list)
             
     return {
         "active_rules": rules_serializable,
-        "messages": [AIMessage(content=f"Brain: Dispatched. Active Rules: {active_count}")]
+        "active_agents": active_agents,
+        "messages": [AIMessage(content=f"Brain: Dispatched {len(active_agents)} agents. Active Rules: {active_count}")]
     }
 
 async def analysis_node(state: ComplianceState):

@@ -687,6 +687,10 @@ async def sync_deep_analysis_results(
         
         # 3. Insert new violations
         for v_data in new_violations:
+            # Handle potential metadata key rename if present in v_data
+            if "metadata" in v_data:
+                v_data["violation_metadata"] = v_data.pop("metadata")
+            
             db_violation = Violation(**v_data)
             db.add(db_violation)
             

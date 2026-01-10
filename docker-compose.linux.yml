@@ -1,0 +1,221 @@
+# =============================================================================
+# LINUX PRODUCTION DOCKER COMPOSE - Optimized for Cloudflare + Resource Efficiency
+# =============================================================================
+# Usage: docker compose -f docker-compose.linux.yml up -d
+#
+# This configuration maximizes Docker resources for the backend while
+# leaving enough headroom for basic system usage on your Linux PC.
+
+version: "3.8"
+
+services:
+  # ===========================================================================
+  # PostgreSQL - Optimized for Performance
+  # ===========================================================================
+  postgres:
+    image: postgres:15-alpine
+    container_name: compliance-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-compliance_user}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-compliance_pass}
+      POSTGRES_DB: ${POSTGRES_DB:-compliance_db}
+      # Performance tuning for i5-8250U laptop (8GB RAM)
+      POSTGRES_SHARED_BUFFERS: 128MB
+      POSTGRES_EFFECTIVE_CACHE_SIZE: 384MB
+      POSTGRES_WORK_MEM: 8MB
+      POSTGRES_MAINTENANCE_WORK_MEM: 64MB
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh:ro
+    networks:
+      - compliance-network
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "pg_isready -U ${POSTGRES_USER:-compliance_user} -d ${POSTGRES_DB:-compliance_db}",
+        ]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 128M
+    restart: unless-stopped
+
+  # ===========================================================================
+  # Redis - Optimized for Caching & LangGraph State
+  # ===========================================================================
+  redis:
+    image: redis:7-alpine
+    container_name: compliance-redis
+    command: >
+      redis-server
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+      --appendonly yes
+      --appendfsync everysec
+      --save 60 1000
+      --tcp-keepalive 300
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - compliance-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+        reservations:
+          cpus: "0.05"
+          memory: 32M
+    restart: unless-stopped
+
+  # ===========================================================================
+  # Backend - Maximum Resources for AI/Agent Workloads
+  # ===========================================================================
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.linux
+    container_name: compliance-backend
+    environment:
+      # Database
+      - DATABASE_URL=postgresql://${POSTGRES_USER:-compliance_user}:${POSTGRES_PASSWORD:-compliance_pass}@postgres:5432/${POSTGRES_DB:-compliance_db}
+      - REDIS_URL=redis://redis:6379/0
+
+      # LLM Configuration
+      - LLM_API_KEY=${LLM_API_KEY}
+      - LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
+      - LLM_MODEL=gemini-2.0-flash
+
+      # Firebase
+      - FIREBASE_PROJECT_ID=${VITE_FIREBASE_PROJECT_ID}
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
+      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/service-account.json
+
+      # LangSmith Observability
+      - LANGCHAIN_TRACING_V2=true
+      - LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
+      - LANGCHAIN_API_KEY=${LANGSMITH_API_KEY}
+      - LANGCHAIN_PROJECT=${LANGSMITH_PROJECT}
+
+      # Production Settings - Optimized for i5-8250U
+      - ENVIRONMENT=production
+      - LOG_LEVEL=INFO
+      - GUNICORN_WORKERS=2
+
+      # Python Optimization
+      - PYTHONOPTIMIZE=2
+      - PYTHONUNBUFFERED=1
+    ports:
+      - "8000:8000"
+    volumes:
+      - uploads:/app/uploads
+      - ./service-account.json:/app/service-account.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - compliance-network
+    deploy:
+      resources:
+        limits:
+          cpus: "3.0" # 3 of 8 threads, leaves 5 for system on i5-8250U
+          memory: 2G # Leaves ~6GB for system on 8GB RAM laptop
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+    restart: unless-stopped
+    # Increase process limits for heavy workloads
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+
+  # ===========================================================================
+  # Nginx Reverse Proxy - Cloudflare Compatible
+  # ===========================================================================
+  nginx:
+    image: nginx:alpine
+    container_name: compliance-proxy
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.linux.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./nginx-ssl:/etc/nginx/ssl:ro # Optional: for SSL termination if not using Cloudflare
+    depends_on:
+      - backend
+    networks:
+      - compliance-network
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 128M
+        reservations:
+          cpus: "0.1"
+          memory: 32M
+    restart: unless-stopped
+
+  # ===========================================================================
+  # PgAdmin (Optional - for development/debugging)
+  # ===========================================================================
+  pgadmin:
+    image: dpage/pgadmin4:latest
+    container_name: compliance-pgadmin
+    profiles:
+      - debug # Only starts with: docker compose --profile debug up
+    environment:
+      PGADMIN_DEFAULT_EMAIL: ${PGADMIN_EMAIL:-admin@local.com}
+      PGADMIN_DEFAULT_PASSWORD: ${PGADMIN_PASSWORD:-admin123}
+      PGADMIN_CONFIG_SERVER_MODE: "False"
+    ports:
+      - "5050:80"
+    depends_on:
+      - postgres
+    networks:
+      - compliance-network
+    volumes:
+      - pgadmin_data:/var/lib/pgadmin
+    deploy:
+      resources:
+        limits:
+          cpus: "0.25"
+          memory: 256M
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+    driver: local
+  redis_data:
+    driver: local
+  pgadmin_data:
+    driver: local
+  uploads:
+    driver: local
+
+networks:
+  compliance-network:
+    driver: bridge
+    ipam:
+      driver: default
+      config:
+        - subnet: 172.28.0.0/16

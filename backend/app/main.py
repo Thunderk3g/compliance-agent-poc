@@ -28,14 +28,14 @@ async def lifespan(app: FastAPI):
     else:
         logger.warning("⚠️ LLM service is not available - using fallback responses")
 
-    # Initialize Redis Checkpointer (creates indices)
+    # Initialize Graph (warmup)
     try:
-        from .services.agents.orchestration import compliance_graph
-        if compliance_graph.checkpointer and hasattr(compliance_graph.checkpointer, "setup"):
-            await compliance_graph.checkpointer.setup()
-            logger.info("✅ Redis checkpointing initialized")
+        from .services.agents.orchestrator import orchestrator
+        logger.info("Compliance Graph initialized")
+    except ImportError as e:
+        logger.warning(f"Failed to import orchestrator: {e}")
     except Exception as e:
-        logger.warning(f"Failed to initialize Redis checkpointing: {e}")
+        logger.warning(f"Failed to initialize Compliance Graph: {e}")
 
     yield
 
@@ -71,6 +71,12 @@ app.include_router(admin.router)  # Phase 2: Admin routes for rule management
 app.include_router(preprocessing.router)  # Phase 3: Chunked content processing
 app.include_router(onboarding.router)  # Adaptive Engine: User onboarding
 app.include_router(projects.router)  # Phase 1: Project System
+ 
+from strawberry.fastapi import GraphQLRouter
+from .graphql.schema import schema
+
+graphql_app = GraphQLRouter(schema)
+app.include_router(graphql_app, prefix="/graphql")
 
 
 # Health check

@@ -1,5 +1,5 @@
 from sqlalchemy import Column, String, Text, ForeignKey, Boolean
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.dialects.postgresql import UUID, JSONB
 from sqlalchemy.orm import relationship
 import uuid
 from ..database import Base
@@ -18,6 +18,7 @@ class Violation(Base):
     current_text = Column(Text)
     suggested_fix = Column(Text)
     is_auto_fixable = Column(Boolean, default=False)
+    violation_metadata = Column(JSONB, nullable=True, comment="Flexible metadata for violation context (e.g. specific DOM element attributes)")
 
     # Relationships
     check = relationship("ComplianceCheck", back_populates="violations")

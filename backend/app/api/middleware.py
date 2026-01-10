@@ -17,17 +17,40 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
     """
     
     async def dispatch(self, request: Request, call_next):
-        user_id = request.headers.get("X-User-Id")
+        auth_header = request.headers.get("Authorization")
+        user_id = None
         
+        if auth_header and auth_header.startswith("Bearer "):
+            token_str = auth_header.split("Bearer ")[1]
+            from ..services.firebase_service import firebase_service
+            decoded_token = firebase_service.verify_token(token_str)
+            if decoded_token:
+                # Map Firebase UID to UUID like in deps.py
+                firebase_uid = decoded_token.get("uid")
+                try:
+                    import uuid
+                    if len(firebase_uid) != 36:
+                        import hashlib
+                        m = hashlib.md5()
+                        m.update(firebase_uid.encode('utf-8'))
+                        user_id = str(uuid.UUID(m.hexdigest()))
+                    else:
+                        user_id = str(uuid.UUID(firebase_uid))
+                except:
+                    logger.warning(f"Middleware: Could not map Firebase UID {firebase_uid} to UUID")
+
+        # Fallback to X-User-Id for POC compatibility during migration
+        if not user_id:
+            user_id = request.headers.get("X-User-Id")
+
         token = None
         if user_id:
             try:
-                # Basic validation
+                import uuid
                 uid = str(uuid.UUID(user_id))
                 token = user_id_context.set(uid)
-                # logger.debug(f"Middleware: Context set for user {uid}")
             except ValueError:
-                logger.warning(f"Middleware: Invalid X-User-Id header: {user_id}")
+                logger.warning(f"Middleware: Invalid user identity: {user_id}")
         
         try:
             response = await call_next(request)
