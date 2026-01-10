@@ -54,32 +54,55 @@ class ComplianceOrchestrator:
             from langgraph.checkpoint.redis import AsyncRedisSaver
             conn = AsyncRedis.from_url(self.redis_url, decode_responses=False)
             self.checkpointer = AsyncRedisSaver(redis_client=conn)
+            self._checkpointer_initialized = False
             logger.info(f"Using Async Redis persistence at {self.redis_url}")
         except ImportError:
             logger.warning("langgraph-checkpoint-redis not installed. Falling back to MemorySaver.")
             from langgraph.checkpoint.memory import MemorySaver
             self.checkpointer = MemorySaver()
+            self._checkpointer_initialized = True
         except Exception as e:
             logger.warning(f"Failed to connect to Redis: {e}. Falling back to MemorySaver.")
             from langgraph.checkpoint.memory import MemorySaver
             self.checkpointer = MemorySaver()
+            self._checkpointer_initialized = True
 
         # 4. Compile
         return workflow.compile(
             checkpointer=self.checkpointer,
             interrupt_before=["refinement_node"]
         )
+    
+    async def _ensure_checkpointer_setup(self):
+        """Initialize Redis checkpointer indexes if not already done."""
+        if self._checkpointer_initialized:
+            return
+        try:
+            if hasattr(self.checkpointer, 'setup'):
+                await self.checkpointer.setup()
+                logger.info("Redis checkpointer indexes initialized")
+            self._checkpointer_initialized = True
+        except Exception as e:
+            logger.warning(f"Failed to setup Redis checkpointer: {e}. Falling back to MemorySaver.")
+            from langgraph.checkpoint.memory import MemorySaver
+            self.checkpointer = MemorySaver()
+            self._checkpointer_initialized = True
+            # Rebuild graph with new checkpointer
+            self.graph = self._build_graph()
 
     async def run_workflow(self, initial_state: ComplianceState, config: RunnableConfig):
         """Executes the workflow."""
+        await self._ensure_checkpointer_setup()
         return await self.graph.ainvoke(initial_state, config=config)
 
     async def get_state(self, config: RunnableConfig):
         """Gets current graph state."""
+        await self._ensure_checkpointer_setup()
         return await self.graph.aget_state(config)
 
     async def update_state(self, config: RunnableConfig, values: Dict[str, Any]):
         """Updates graph state."""
+        await self._ensure_checkpointer_setup()
         return await self.graph.aupdate_state(config, values)
 
     def get_graph_image(self):

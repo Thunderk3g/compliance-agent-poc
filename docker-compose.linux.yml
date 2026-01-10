@@ -51,19 +51,13 @@ services:
     restart: unless-stopped
 
   # ===========================================================================
-  # Redis - Optimized for Caching & LangGraph State
+  # Redis Stack - Includes Redis Search for LangGraph Checkpointing
   # ===========================================================================
   redis:
-    image: redis:7-alpine
+    image: redis/redis-stack-server:latest
     container_name: compliance-redis
-    command: >
-      redis-server
-      --maxmemory 256mb
-      --maxmemory-policy allkeys-lru
-      --appendonly yes
-      --appendfsync everysec
-      --save 60 1000
-      --tcp-keepalive 300
+    environment:
+      - REDIS_ARGS=--maxmemory 256mb --maxmemory-policy allkeys-lru --appendonly yes
     ports:
       - "6379:6379"
     volumes:
