@@ -41,16 +41,29 @@ class AuthenticationMiddleware(BaseHTTPMiddleware):
 
         # Fallback to X-User-Id for POC compatibility during migration
         if not user_id:
-            user_id = request.headers.get("X-User-Id")
+            x_user_id = request.headers.get("X-User-Id")
+            if x_user_id:
+                # Apply same MD5 hashing logic as deps.py to convert Firebase UID to UUID
+                try:
+                    import uuid
+                    import hashlib
+                    if len(x_user_id) == 36:
+                        # It's already a UUID format
+                        user_id = str(uuid.UUID(x_user_id))
+                    else:
+                        # Firebase UID - hash it to create deterministic UUID
+                        m = hashlib.md5()
+                        m.update(x_user_id.encode('utf-8'))
+                        user_id = str(uuid.UUID(m.hexdigest()))
+                except Exception as e:
+                    logger.warning(f"Middleware: Could not convert X-User-Id '{x_user_id}' to UUID: {e}")
 
         token = None
         if user_id:
             try:
-                import uuid
-                uid = str(uuid.UUID(user_id))
-                token = user_id_context.set(uid)
-            except ValueError:
-                logger.warning(f"Middleware: Invalid user identity: {user_id}")
+                token = user_id_context.set(user_id)
+            except Exception as e:
+                logger.warning(f"Middleware: Could not set user context: {e}")
         
         try:
             response = await call_next(request)
