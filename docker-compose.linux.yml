@@ -97,11 +97,10 @@ services:
       - LLM_BASE_URL=https://generativelanguage.googleapis.com/v1beta/openai/
       - LLM_MODEL=gemini-2.0-flash
 
-      # Firebase (service-account.json is optional - only needed for Firebase Admin SDK)
+      # Firebase Service Account (required for proper token verification)
       - FIREBASE_PROJECT_ID=${VITE_FIREBASE_PROJECT_ID}
-      # Uncomment these if you have service-account.json:
-      # - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
-      # - FIREBASE_SERVICE_ACCOUNT_PATH=/app/service-account.json
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
+      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/service-account.json
 
       # LangSmith Observability
       - LANGCHAIN_TRACING_V2=true
@@ -121,8 +120,7 @@ services:
       - "8000:8000"
     volumes:
       - uploads:/app/uploads
-      # Uncomment if you have service-account.json:
-      # - ./service-account.json:/app/service-account.json:ro
+      - ./service-account.json:/app/service-account.json:ro
     depends_on:
       postgres:
         condition: service_healthy

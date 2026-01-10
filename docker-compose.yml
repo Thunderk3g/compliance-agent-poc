@@ -81,9 +81,9 @@ services:
       - FIREBASE_PROJECT_ID=${VITE_FIREBASE_PROJECT_ID}
       - ENVIRONMENT=development
       - LOG_LEVEL=INFO
-      # Service account is optional - use env vars or mount the file if available
-      # - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
-      # - FIREBASE_SERVICE_ACCOUNT_PATH=/app/service-account.json
+      # Firebase Service Account (create this file for proper token verification)
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/service-account.json
+      - FIREBASE_SERVICE_ACCOUNT_PATH=/app/service-account.json
       - LANGCHAIN_TRACING_V2=true
       - LANGCHAIN_ENDPOINT=https://api.smith.langchain.com
       - LANGCHAIN_API_KEY=${LANGSMITH_API_KEY}
@@ -93,8 +93,8 @@ services:
     volumes:
       - ./backend:/app
       - uploads:/app/uploads
-      # Uncomment if you have service-account.json:
-      # - ./service-account.json:/app/service-account.json:ro
+      # Mount service-account.json for Firebase Admin SDK
+      - ./service-account.json:/app/service-account.json:ro
     depends_on:
       postgres:
         condition: service_healthy
