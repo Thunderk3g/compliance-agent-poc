@@ -3,6 +3,8 @@ from uuid import UUID
 from typing import List, Optional
 from ..models.project import Project
 from ..models.user import User
+from ..models.project_agent import ProjectAgent
+from ..models.agent_registry import AgentRegistry
 
 class ProjectService:
     def __init__(self, db: Session):
@@ -13,24 +15,32 @@ class ProjectService:
         user_id: UUID, 
         name: str, 
         description: str = None,
-        agent_voice: bool = False,
-        agent_compliance: bool = True,
-        agent_analytics: bool = False,
-        agent_sales: bool = False,
-        agent_config: dict = None
+        active_agents: List[str] = []
     ) -> Project:
         """Create a new project for a user."""
         project = Project(
             name=name,
             description=description,
-            created_by=user_id,
-            agent_voice=agent_voice,
-            agent_compliance=agent_compliance,
-            agent_analytics=agent_analytics,
-            agent_sales=agent_sales,
-            agent_config=agent_config
+            created_by=user_id
         )
         self.db.add(project)
+        self.db.flush() # Get ID before adding agents
+        
+        # Add agents
+        if not active_agents:
+            active_agents = ["compliance"] # Default agent
+            
+        for agent_type in active_agents:
+            # Verify agent exists in registry
+            agent_exists = self.db.query(AgentRegistry).filter(AgentRegistry.agent_type == agent_type).first()
+            if agent_exists:
+                pa = ProjectAgent(
+                    project_id=project.id,
+                    agent_type=agent_type,
+                    enabled=True
+                )
+                self.db.add(pa)
+        
         self.db.commit()
         self.db.refresh(project)
         return project
@@ -40,11 +50,7 @@ class ProjectService:
         project_id: UUID, 
         name: Optional[str] = None,
         description: Optional[str] = None,
-        agent_voice: Optional[bool] = None,
-        agent_compliance: Optional[bool] = None,
-        agent_analytics: Optional[bool] = None,
-        agent_sales: Optional[bool] = None,
-        agent_config: Optional[dict] = None
+        active_agents: Optional[List[str]] = None
     ) -> Optional[Project]:
         """Update an existing project."""
         project = self.get_project(project_id)
@@ -55,16 +61,28 @@ class ProjectService:
             project.name = name
         if description is not None:
             project.description = description
-        if agent_voice is not None:
-            project.agent_voice = agent_voice
-        if agent_compliance is not None:
-            project.agent_compliance = agent_compliance
-        if agent_analytics is not None:
-            project.agent_analytics = agent_analytics
-        if agent_sales is not None:
-            project.agent_sales = agent_sales
-        if agent_config is not None:
-            project.agent_config = agent_config
+            
+        if active_agents is not None:
+            # Sync agents: removal
+            current_agents = {pa.agent_type for pa in project.agents}
+            target_agents = set(active_agents)
+            
+            # Remove agents not in target list
+            for pa in list(project.agents):
+                if pa.agent_type not in target_agents:
+                    self.db.delete(pa)
+            
+            # Add new agents
+            for agent_type in target_agents:
+                if agent_type not in current_agents:
+                    agent_exists = self.db.query(AgentRegistry).filter(AgentRegistry.agent_type == agent_type).first()
+                    if agent_exists:
+                        pa = ProjectAgent(
+                            project_id=project.id,
+                            agent_type=agent_type,
+                            enabled=True
+                        )
+                        self.db.add(pa)
             
         self.db.commit()
         self.db.refresh(project)

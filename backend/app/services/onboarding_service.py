@@ -113,7 +113,7 @@ class OnboardingService:
         if "seo" in analysis_scope:
             logger.info("Generating SEO rules")
             # Use RAG fallback for SEO (universal best practices)
-            from .compliance_knowledge_base import SEO_KNOWLEDGE
+            from .agents.compliance.knowledge_base import SEO_KNOWLEDGE
             
             seo_rules = await llm_service.generate_rules_from_context(
                 search_results=SEO_KNOWLEDGE,

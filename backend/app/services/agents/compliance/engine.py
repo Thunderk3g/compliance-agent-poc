@@ -7,19 +7,19 @@ from sqlalchemy.orm import Session
 from datetime import datetime
 from langsmith import traceable
 
-from ..models.rule import Rule
-from ..models.submission import Submission
-from ..models.compliance_check import ComplianceCheck
-from ..models.violation import Violation
-from ..models.compliance_state import ComplianceState
-from ..schemas.compliance_schemas import ComplianceAnalysisResult
-from ..models.agent_execution import AgentExecution
+from app.models.rule import Rule
+from app.models.submission import Submission
+from app.models.compliance_check import ComplianceCheck
+from app.models.violation import Violation
+from app.models.compliance_state import ComplianceState
+from app.schemas.compliance_schemas import ComplianceAnalysisResult
+from app.models.agent_execution import AgentExecution
 
-from .llm_service import llm_service
-from .scoring_service import scoring_service
-from .content_retrieval_service import ContentRetrievalService
-from .preprocessing_service import ContextEngineeringService
-from .agents.agent_factory import AgentFactory
+from app.services.llm_service import llm_service
+from app.services.agents.compliance.scoring import scoring_service
+from app.services.content_retrieval_service import ContentRetrievalService
+from app.services.preprocessing_service import ContextEngineeringService
+from app.services.agents.agent_factory import AgentFactory
 
 logger = logging.getLogger(__name__)
 
@@ -50,7 +50,7 @@ class ComplianceEngine:
             db.commit()
 
             # Initialize Graph Context
-            from .agents.orchestration import compliance_graph, GraphContext
+            from app.services.agents.orchestration import compliance_graph, GraphContext
             
             # Set Context for DB Session
             token = GraphContext.set_db_session(db)
@@ -142,7 +142,7 @@ class ComplianceEngine:
             if not submission:
                 raise ValueError("Submission not found")
                 
-            from .agents.orchestration import compliance_graph, GraphContext
+            from app.services.agents.orchestration import compliance_graph, GraphContext
             
             # Set Context
             token = GraphContext.set_db_session(db)
@@ -203,7 +203,7 @@ class ComplianceEngine:
         Returns a dict structure matching ComplianceCheckResponse.
         """
         try:
-            from .agents.orchestration import compliance_graph
+            from app.services.agents.orchestration import compliance_graph
             
             config = {"configurable": {"thread_id": str(submission_id)}}
             snapshot = await compliance_graph.aget_state(config)
@@ -340,7 +340,7 @@ class ComplianceEngine:
                 execution.execution_time_ms = int((end_time - start_time).total_seconds() * 1000)
                 
                 # Aggregate tokens
-                from ..models.tool_invocation import ToolInvocation
+                from app.models.tool_invocation import ToolInvocation
                 tool_invocations = context_service.db.query(ToolInvocation).filter(ToolInvocation.execution_id == execution.id).all()
                 execution.total_tokens_used = sum(inv.tokens_used for inv in tool_invocations)
                 

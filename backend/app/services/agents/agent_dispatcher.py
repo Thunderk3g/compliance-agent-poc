@@ -45,7 +45,7 @@ class AgentDispatcher:
         from .analytics.analytics_agent import AnalyticsAgent
         from .sales.sales_agent import SalesAgent
         # Compliance uses existing engine
-        from ..compliance_engine import ComplianceEngine
+        from .compliance.engine import ComplianceEngine
         
         self._agents = {
             AgentType.VOICE: VoiceAuditAgent(),

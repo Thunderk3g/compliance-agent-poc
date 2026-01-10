@@ -5,7 +5,7 @@ from typing import Optional, Dict, Any
 from sqlalchemy.orm import Session
 
 from .agents.orchestration import compliance_graph, GraphContext
-from .compliance_engine import ComplianceEngine
+from .agents.compliance.engine import ComplianceEngine
 from ..models.submission import Submission
 from ..models.compliance_state import ComplianceState
 

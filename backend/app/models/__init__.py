@@ -15,10 +15,16 @@ from .voice_report import VoiceReport
 from .analytics_report import AnalyticsReport
 from .voice_result import VoiceResult
 from .analytics_result import AnalyticsResult
+from .sales_interaction import SalesInteraction
+from .policy import Policy
+from .analytics_data import Dataset, DatasetRow
+from .agent_registry import AgentRegistry
+from .project_agent import ProjectAgent
 
 __all__ = [
     "User", "Submission", "ComplianceCheck", "Violation", "Rule", 
     "DeepAnalysis", "ContentChunk", "UserConfig", "Project", "Guideline",
     "AgentExecution", "AgentTrace", "ToolInvocation", "VoiceReport", "AnalyticsReport",
-    "VoiceResult", "AnalyticsResult"
+    "VoiceResult", "AnalyticsResult", "SalesInteraction", "Policy", "Dataset", "DatasetRow",
+    "AgentRegistry", "ProjectAgent"
 ]

@@ -20,43 +20,62 @@ depends_on: Union[str, Sequence[str], None] = None
 
 def upgrade() -> None:
     """Upgrade schema."""
-    # Add agent columns to projects table
-    op.add_column('projects', sa.Column('agent_voice', sa.Boolean(), nullable=True, server_default='false'))
-    op.add_column('projects', sa.Column('agent_analytics', sa.Boolean(), nullable=True, server_default='false'))
-    op.add_column('projects', sa.Column('agent_sales', sa.Boolean(), nullable=True, server_default='false'))
-    op.add_column('projects', sa.Column('agent_compliance', sa.Boolean(), nullable=True, server_default='true'))
-    op.add_column('projects', sa.Column('agent_config', sa.dialects.postgresql.JSONB(astext_type=sa.Text()), nullable=True))
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
     
-    # Create voice_reports table
-    op.create_table(
-        'voice_reports',
-        sa.Column('id', sa.dialects.postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('project_id', sa.dialects.postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('submission_id', sa.dialects.postgresql.UUID(as_uuid=True), nullable=True),
-        sa.Column('transcript', sa.Text(), nullable=True),
-        sa.Column('sentiment_analysis', sa.dialects.postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column('tone_report', sa.dialects.postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ondelete='CASCADE'),
-        sa.ForeignKeyConstraint(['submission_id'], ['submissions.id'], ondelete='SET NULL'),
-        sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_voice_reports_project_id'), 'voice_reports', ['project_id'], unique=False)
-    op.create_index(op.f('ix_voice_reports_submission_id'), 'voice_reports', ['submission_id'], unique=False)
+    # Check existing columns in projects table
+    existing_columns = [c['name'] for c in inspector.get_columns('projects')]
     
-    # Create analytics_reports table
-    op.create_table(
-        'analytics_reports',
-        sa.Column('id', sa.dialects.postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('project_id', sa.dialects.postgresql.UUID(as_uuid=True), nullable=False),
-        sa.Column('bi_reasoning', sa.Text(), nullable=True),
-        sa.Column('data_insights', sa.dialects.postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column('metrics', sa.dialects.postgresql.JSONB(astext_type=sa.Text()), nullable=True),
-        sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
-        sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ondelete='CASCADE'),
-        sa.PrimaryKeyConstraint('id')
-    )
-    op.create_index(op.f('ix_analytics_reports_project_id'), 'analytics_reports', ['project_id'], unique=False)
+    if 'agent_voice' not in existing_columns:
+        op.add_column('projects', sa.Column('agent_voice', sa.Boolean(), nullable=True, server_default='false'))
+    
+    if 'agent_analytics' not in existing_columns:
+        op.add_column('projects', sa.Column('agent_analytics', sa.Boolean(), nullable=True, server_default='false'))
+        
+    if 'agent_sales' not in existing_columns:
+        op.add_column('projects', sa.Column('agent_sales', sa.Boolean(), nullable=True, server_default='false'))
+        
+    if 'agent_compliance' not in existing_columns:
+        op.add_column('projects', sa.Column('agent_compliance', sa.Boolean(), nullable=True, server_default='true'))
+        
+    if 'agent_config' not in existing_columns:
+        op.add_column('projects', sa.Column('agent_config', sa.dialects.postgresql.JSONB(astext_type=sa.Text()), nullable=True))
+    
+    # Check existing tables
+    existing_tables = inspector.get_table_names()
+    
+    # Create voice_reports table if it doesn't exist
+    if 'voice_reports' not in existing_tables:
+        op.create_table(
+            'voice_reports',
+            sa.Column('id', sa.dialects.postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column('project_id', sa.dialects.postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column('submission_id', sa.dialects.postgresql.UUID(as_uuid=True), nullable=True),
+            sa.Column('transcript', sa.Text(), nullable=True),
+            sa.Column('sentiment_analysis', sa.dialects.postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+            sa.Column('tone_report', sa.dialects.postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+            sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+            sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ondelete='CASCADE'),
+            sa.ForeignKeyConstraint(['submission_id'], ['submissions.id'], ondelete='SET NULL'),
+            sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index(op.f('ix_voice_reports_project_id'), 'voice_reports', ['project_id'], unique=False)
+        op.create_index(op.f('ix_voice_reports_submission_id'), 'voice_reports', ['submission_id'], unique=False)
+    
+    # Create analytics_reports table if it doesn't exist
+    if 'analytics_reports' not in existing_tables:
+        op.create_table(
+            'analytics_reports',
+            sa.Column('id', sa.dialects.postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column('project_id', sa.dialects.postgresql.UUID(as_uuid=True), nullable=False),
+            sa.Column('bi_reasoning', sa.Text(), nullable=True),
+            sa.Column('data_insights', sa.dialects.postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+            sa.Column('metrics', sa.dialects.postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+            sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=True),
+            sa.ForeignKeyConstraint(['project_id'], ['projects.id'], ondelete='CASCADE'),
+            sa.PrimaryKeyConstraint('id')
+        )
+        op.create_index(op.f('ix_analytics_reports_project_id'), 'analytics_reports', ['project_id'], unique=False)
 
 
 def downgrade() -> None:

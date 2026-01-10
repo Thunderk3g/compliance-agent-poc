@@ -12,16 +12,16 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from .llm_service import llm_service
-from .content_parser import content_parser
-from .prompts.rule_extraction_prompt import (
+from app.services.llm_service import llm_service
+from app.services.content_parser import content_parser
+from app.services.prompts.rule_extraction_prompt import (
     build_rule_extraction_prompt,
     build_rule_extraction_prompt_with_instructions
 )
-from ..models.rule import Rule
-from ..models.user import User
-from ..schemas.rule_extraction_schema import RuleExtractionResult
-from ..schemas.human_review_schema import HumanReviewRequest
+from app.models.rule import Rule
+from app.models.user import User
+from app.schemas.rule_extraction_schema import RuleExtractionResult
+from app.schemas.human_review_schema import HumanReviewRequest
 
 logger = logging.getLogger(__name__)
 

@@ -9,8 +9,8 @@ from .state import ComplianceState
 
 # Services
 from app.services.preprocessing_service import ContextEngineeringService
-from app.services.scoring_service import scoring_service
-from app.services.compliance_engine import ComplianceEngine as LegacyEngine # For helper methods if needed
+from app.services.agents.compliance.scoring import scoring_service
+from app.services.agents.compliance.engine import ComplianceEngine as LegacyEngine # For helper methods if needed
 from app.models.submission import Submission
 from app.models.content_chunk import ContentChunk
 from app.models.agent_execution import AgentExecution

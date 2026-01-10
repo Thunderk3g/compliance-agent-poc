@@ -58,7 +58,8 @@ class LLMService:
         self,
         prompt: str,
         system_prompt: str = None,
-        context: Dict[str, Any] = None
+        context: Dict[str, Any] = None,
+        **kwargs
     ) -> str:
         """Generate response from LLM."""
         messages = self._build_chat_messages(prompt, system_prompt, context)
@@ -67,7 +68,8 @@ class LLMService:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=messages,
-                temperature=0.7
+                temperature=kwargs.get("temperature", 0.7),
+                **{k: v for k, v in kwargs.items() if k != "temperature"}
             )
             response_text = response.choices[0].message.content.strip()
             

@@ -103,7 +103,7 @@ class ScoringService:
             return violations
 
         # Import here to avoid circular dependency
-        from ..models.rule import Rule
+        from app.models.rule import Rule
         import uuid
 
         enriched = []

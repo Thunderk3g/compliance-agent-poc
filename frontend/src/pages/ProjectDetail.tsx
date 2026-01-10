@@ -9,7 +9,7 @@ import { api } from '../lib/api';
 import { Results } from './Results';
 import { VoiceReportsView } from '../components/VoiceReportsView';
 import { AnalyticsReportsView } from '../components/AnalyticsReportsView';
-import { Project, Guideline, Submission } from '../lib/types';
+import { Project, Guideline, Submission, AgentRegistryResponse } from '../lib/types';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { format } from 'date-fns';
@@ -60,6 +60,9 @@ export default function ProjectDetail() {
     const [refineInstructions, setRefineInstructions] = useState('');
     const [isRefining, setIsRefining] = useState(false);
 
+    const [agentRegistry, setAgentRegistry] = useState<AgentRegistryResponse[]>([]);
+    const [isTogglingAgent, setIsTogglingAgent] = useState<string | null>(null);
+
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
@@ -68,6 +71,12 @@ export default function ProjectDetail() {
         }
     }, [id]);
 
+    // Helper function to check if an agent is enabled
+    const hasAgent = (agentType: string): boolean => {
+        if (!project) return false;
+        return project.agents?.some(agent => agent.agent_type === agentType && agent.enabled) || false;
+    };
+
     const fetchProjectData = async () => {
         try {
             setLoading(true);
@@ -75,15 +84,17 @@ export default function ProjectDetail() {
 
             const userId = localStorage.getItem('userId') || '550e8400-e29b-41d4-a716-446655440000';
 
-            const [projRes, guideRes, subRes] = await Promise.all([
+            const [projRes, guideRes, subRes, registryRes] = await Promise.all([
                 api.getProject(id),
                 api.getProjectGuidelines(id),
-                api.getSubmissions(id)
+                api.getSubmissions(id),
+                api.getAgentRegistry()
             ]);
 
             setProject(projRes.data);
             setGuidelines(guideRes.data);
             setSubmissions(subRes.data);
+            setAgentRegistry(registryRes.data);
 
             // Fetch all rules with proper pagination (max page_size is 100)
             const guidelineIds = guideRes.data.map((g: Guideline) => g.id);
@@ -426,7 +437,7 @@ export default function ProjectDetail() {
                         <FileText className="w-4 h-4 inline-block mr-2" />
                         Content Analysis
                     </button>
-                    {project.agent_voice && (
+                    {hasAgent('voice') && (
                         <button
                             onClick={() => setActiveTab('voice')}
                             className={`
@@ -440,7 +451,7 @@ export default function ProjectDetail() {
                             Voice Audit
                         </button>
                     )}
-                    {project.agent_analytics && (
+                    {hasAgent('analytics') && (
                         <button
                             onClick={() => setActiveTab('analytics')}
                             className={`
@@ -835,92 +846,65 @@ export default function ProjectDetail() {
                     </div>
                 )}
 
-                {activeTab === 'settings' && (
-                    <div className="animate-slide-up space-y-6">
+                {activeTab === 'settings' && project && (
+                    <div className="space-y-6 animate-slide-up">
                         <Card>
                             <CardHeader>
-                                <CardTitle>Project Settings</CardTitle>
-                                <CardDescription>Manage project details and active agents</CardDescription>
+                                <CardTitle className="flex items-center gap-2">
+                                    <Settings className="w-5 h-5 text-gray-400" />
+                                    Project Settings
+                                </CardTitle>
+                                <CardDescription>Manage your project's active agents and configuration.</CardDescription>
                             </CardHeader>
-                            <CardContent className="space-y-6">
-                                <div className="space-y-4">
+                            <CardContent>
+                                <div className="space-y-8">
                                     <div>
-                                        <label className="block text-sm font-medium text-gray-700 mb-1">Active Agents</label>
+                                        <h3 className="text-sm font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                                            Active Agents
+                                        </h3>
                                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                            <div className="flex items-center justify-between p-4 border rounded-xl bg-white shadow-sm hover:border-blue-200 transition-colors">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="p-2 bg-blue-50 text-blue-600 rounded-lg">
-                                                        <Shield className="w-5 h-5" />
-                                                    </div>
-                                                    <div>
-                                                        <div className="font-semibold text-gray-900">Compliance Agent</div>
-                                                        <div className="text-xs text-gray-500">Core regulatory check</div>
-                                                    </div>
-                                                </div>
-                                                <button 
-                                                    onClick={async () => {
-                                                        try {
-                                                            const updated = await api.updateProject(id!, { agent_compliance: !project.agent_compliance });
-                                                            setProject(updated.data);
-                                                        } catch (e) {
-                                                            console.error("Update failed", e);
-                                                        }
-                                                    }}
-                                                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${project.agent_compliance ? 'bg-blue-600' : 'bg-gray-200'}`}
-                                                >
-                                                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${project.agent_compliance ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                </button>
-                                            </div>
+                                            {agentRegistry.filter(a => a.is_active).map((agent) => {
+                                                const isEnabled = hasAgent(agent.agent_type);
+                                                const isLoading = isTogglingAgent === agent.agent_type;
 
-                                            <div className="flex items-center justify-between p-4 border rounded-xl bg-white shadow-sm hover:border-purple-200 transition-colors">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="p-2 bg-purple-50 text-purple-600 rounded-lg">
-                                                        <Mic className="w-5 h-5" />
+                                                return (
+                                                    <div 
+                                                        key={agent.agent_type}
+                                                        className={`flex items-center justify-between p-4 border rounded-xl bg-white shadow-sm transition-all ${isEnabled ? 'border-blue-200 shadow-md' : 'hover:border-gray-300'}`}
+                                                    >
+                                                        <div className="flex items-center gap-3">
+                                                            <div className={`p-2 rounded-lg ${isEnabled ? 'bg-blue-50 text-blue-600' : 'bg-gray-50 text-gray-400'}`}>
+                                                                {agent.agent_type === 'voice' ? <Mic className="w-5 h-5" /> : 
+                                                                 agent.agent_type === 'analytics' ? <BarChart3 className="w-5 h-5" /> :
+                                                                 <Shield className="w-5 h-5" />}
+                                                            </div>
+                                                            <div>
+                                                                <div className="font-semibold text-gray-900">{agent.display_name}</div>
+                                                                <div className="text-xs text-gray-500">{agent.description}</div>
+                                                            </div>
+                                                        </div>
+                                                        <button 
+                                                            disabled={isLoading}
+                                                            onClick={async () => {
+                                                                try {
+                                                                    setIsTogglingAgent(agent.agent_type);
+                                                                    await api.toggleProjectAgent(id!, agent.agent_type);
+                                                                    // Refresh project to get updated agents list
+                                                                    const res = await api.getProject(id!);
+                                                                    setProject(res.data);
+                                                                } catch (e) {
+                                                                    console.error("Toggle failed", e);
+                                                                } finally {
+                                                                    setIsTogglingAgent(null);
+                                                                }
+                                                            }}
+                                                            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-blue-600 focus:ring-offset-2 ${isEnabled ? 'bg-blue-600' : 'bg-gray-200'} ${isLoading ? 'opacity-50 cursor-not-allowed' : ''}`}
+                                                        >
+                                                            <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isEnabled ? 'translate-x-5' : 'translate-x-0'}`} />
+                                                        </button>
                                                     </div>
-                                                    <div>
-                                                        <div className="font-semibold text-gray-900">Voice Agent</div>
-                                                        <div className="text-xs text-gray-500">Call transcript analysis</div>
-                                                    </div>
-                                                </div>
-                                                <button 
-                                                    onClick={async () => {
-                                                        try {
-                                                            const updated = await api.updateProject(id!, { agent_voice: !project.agent_voice });
-                                                            setProject(updated.data);
-                                                        } catch (e) {
-                                                            console.error("Update failed", e);
-                                                        }
-                                                    }}
-                                                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-purple-600 focus:ring-offset-2 ${project.agent_voice ? 'bg-purple-600' : 'bg-gray-200'}`}
-                                                >
-                                                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${project.agent_voice ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                </button>
-                                            </div>
-
-                                            <div className="flex items-center justify-between p-4 border rounded-xl bg-white shadow-sm hover:border-green-200 transition-colors">
-                                                <div className="flex items-center gap-3">
-                                                    <div className="p-2 bg-green-50 text-green-600 rounded-lg">
-                                                        <BarChart3 className="w-5 h-5" />
-                                                    </div>
-                                                    <div>
-                                                        <div className="font-semibold text-gray-900">Analytics Agent</div>
-                                                        <div className="text-xs text-gray-500">BI data insights</div>
-                                                    </div>
-                                                </div>
-                                                <button 
-                                                    onClick={async () => {
-                                                        try {
-                                                            const updated = await api.updateProject(id!, { agent_analytics: !project.agent_analytics });
-                                                            setProject(updated.data);
-                                                        } catch (e) {
-                                                            console.error("Update failed", e);
-                                                        }
-                                                    }}
-                                                    className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-green-600 focus:ring-offset-2 ${project.agent_analytics ? 'bg-green-600' : 'bg-gray-200'}`}
-                                                >
-                                                    <span className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${project.agent_analytics ? 'translate-x-5' : 'translate-x-0'}`} />
-                                                </button>
-                                            </div>
+                                                );
+                                            })}
                                         </div>
                                     </div>
                                 </div>

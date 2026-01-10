@@ -24,12 +24,16 @@ PyPDF2>=3.0.1
 python-docx==1.1.0
 beautifulsoup4>=4.12.3
 markdown>=3.7
+pandas>=2.0.0
+openpyxl>=3.1.0
 
 # Token-Based Chunking
 tiktoken>=0.8.0
 transformers>=4.46.0
 spacy>=3.7.0
 pdfplumber>=0.11.0
+pgvector>=0.2.0
+openai-whisper>=20231117
 
 # LLM & Agents
 openai>=1.50.0
@@ -39,6 +43,9 @@ langchain>=0.3.0
 langchain-openai>=0.2.0
 langchain-community>=0.3.0
 langsmith>=0.1.130
+
+# Gemini AI
+google-generativeai>=0.8.3
 
 # Sandboxing
 docker>=7.1.0

@@ -7,9 +7,11 @@ from langchain_core.messages import AIMessage
 from .state import ComplianceState
 from app.models.analytics_report import AnalyticsReport
 from app.database import SessionLocal
+from langsmith import traceable
 
 logger = logging.getLogger(__name__)
 
+@traceable(name="Analytics Node: Reasoning", run_type="chain")
 async def analytics_reasoning_node(state: ComplianceState):
     """
     Analytics Agent Reasoning Node.
@@ -20,44 +22,44 @@ async def analytics_reasoning_node(state: ComplianceState):
     chunks_data = state.get("chunks", [])
     project_id = state.get("project_id")
     
-    # Aggregate chunk data for analysis
+    # Initialize Agent
+    from app.services.agents.analytics.analytics_agent import AnalyticsAgent
+    agent = AnalyticsAgent()
+    
+    # Construct input for agent
+    input_data = {
+        "analytics_query": state.get("analytics_query", "executive_summary"),
+        "project_id": state.get("project_id"),
+        "dataset_id": state.get("dataset_id")
+    }
+    
+    # Execute reasoning loop
+    # We pass the DB session explicitly to ensure the agent can access the database
+    db = SessionLocal()
+    try:
+        insight_result = await agent.reason(input_data, db=db)
+    finally:
+        db.close()
+    
+    # Map agent result to expected structure for DB Report
+    # The agent returns: {"metrics": ..., "trends": ..., "anomalies": ..., "narrative": ...}
+    # DB Report expects: bi_reasoning, data_insights, metrics
+    
+    # Calculate content metrics
     total_chunks = len(chunks_data)
-    avg_chunk_size = sum(len(chunk.get("text", "")) for chunk in chunks_data) / total_chunks if total_chunks > 0 else 0
-    
-    # Mocked BI reasoning (replace with real LLM call)
-    bi_reasoning = f"""
-    Business Intelligence Analysis:
-    - Total content chunks analyzed: {total_chunks}
-    - Average chunk size: {avg_chunk_size:.0f} characters
-    - Data quality assessment: High
-    - Recommended actions: Continue with compliance review
-    """
-    
-    data_insights = {
-        "content_volume": total_chunks,
-        "avg_content_length": avg_chunk_size,
-        "quality_score": 0.85,
-        "insights": [
-            "Content is well-structured",
-            "Suitable for automated analysis",
-            "Recommend periodic review"
-        ]
-    }
-    
-    metrics = {
-        "total_chunks": total_chunks,
-        "processing_time_ms": 250,
-        "quality_indicators": {
-            "completeness": 0.9,
-            "clarity": 0.8,
-            "relevance": 0.85
-        }
-    }
-    
+    avg_chunk_size = sum(len(c.get("text", "")) for c in chunks_data) / len(chunks_data) if chunks_data else 0
+
     analytics_result = {
-        "bi_reasoning": bi_reasoning.strip(),
-        "data_insights": data_insights,
-        "metrics": metrics
+        "bi_reasoning": insight_result.get("narrative"),
+        "data_insights": {
+            "content_volume": total_chunks,
+            "avg_content_length": avg_chunk_size,
+            "trends": insight_result.get("trends"),
+            "anomalies": [a.get("probable_cause") for a in insight_result.get("anomalies", [])],
+            "chart_config": insight_result.get("chart_config"),
+            "key_insights": insight_result.get("key_insights")
+        },
+        "metrics": insight_result.get("metrics")
     }
     
     return {
@@ -66,6 +68,7 @@ async def analytics_reasoning_node(state: ComplianceState):
     }
 
 
+@traceable(name="Analytics Node: Output", run_type="chain")
 async def analytics_output_node(state: ComplianceState):
     """
     Analytics Agent Output Node.

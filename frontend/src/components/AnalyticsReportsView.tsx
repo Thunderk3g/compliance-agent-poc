@@ -2,8 +2,9 @@ import React, { useEffect, useState } from 'react';
 import { api } from '../lib/api';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { BarChart3, TrendingUp, Clock, Target } from 'lucide-react';
+import { BarChart3, TrendingUp, Clock, Target, Bot, LayoutDashboard } from 'lucide-react';
 import { format } from 'date-fns';
+import { AnalyticsChat } from './AnalyticsChat';
 
 interface AnalyticsReport {
     id: string;
@@ -32,6 +33,7 @@ export function AnalyticsReportsView({ projectId }: AnalyticsReportsViewProps) {
     const [loading, setLoading] = useState(true);
     const [selectedReport, setSelectedReport] = useState<AnalyticsReport | null>(null);
     const [analyzeLoading, setAnalyzeLoading] = useState(false);
+    const [viewMode, setViewMode] = useState<'reports' | 'chat'>('reports');
 
     useEffect(() => {
         fetchReports();
@@ -61,6 +63,27 @@ export function AnalyticsReportsView({ projectId }: AnalyticsReportsViewProps) {
         }
     };
 
+    if (viewMode === 'chat') {
+        return (
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                     <h3 className="text-lg font-semibold text-gray-900 flex items-center gap-2">
+                        <Bot className="w-5 h-5 text-blue-600" />
+                        Analytics Assistant
+                    </h3>
+                    <button
+                        onClick={() => setViewMode('reports')}
+                        className="text-gray-600 hover:text-blue-600 text-sm font-medium flex items-center gap-1"
+                    >
+                        <LayoutDashboard className="w-4 h-4" />
+                        View Reports
+                    </button>
+                </div>
+                <AnalyticsChat projectId={projectId} />
+            </div>
+        );
+    }
+
     if (loading) {
         return (
             <div className="flex justify-center py-12">
@@ -77,14 +100,23 @@ export function AnalyticsReportsView({ projectId }: AnalyticsReportsViewProps) {
                 <p className="text-gray-500 max-w-sm mx-auto mt-1 mb-6">
                     Business intelligence reports will appear here once analysis is run.
                 </p>
-                <button
-                    onClick={handleAnalyze}
-                    disabled={analyzeLoading}
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                    {analyzeLoading ? <TrendingUp className="w-4 h-4 mr-2 animate-spin" /> : <BarChart3 className="w-4 h-4 mr-2" />}
-                    Generate BI Insights
-                </button>
+                <div className="flex justify-center gap-3">
+                    <button
+                        onClick={handleAnalyze}
+                        disabled={analyzeLoading}
+                        className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                        {analyzeLoading ? <TrendingUp className="w-4 h-4 mr-2 animate-spin" /> : <BarChart3 className="w-4 h-4 mr-2" />}
+                        Generate BI Insights
+                    </button>
+                    <button
+                        onClick={() => setViewMode('chat')}
+                        className="inline-flex items-center px-4 py-2 bg-white text-gray-700 border border-gray-300 rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                        <Bot className="w-4 h-4 mr-2" />
+                        Chat with Data
+                    </button>
+                </div>
             </div>
         );
     }
@@ -138,12 +170,12 @@ export function AnalyticsReportsView({ projectId }: AnalyticsReportsViewProps) {
                                         <div className="p-3 bg-purple-50 rounded-lg">
                                             <div className="text-sm text-gray-600">Avg Length</div>
                                             <div className="text-2xl font-bold text-purple-600">
-                                                {selectedReport.data_insights.avg_content_length.toFixed(0)}
+                                                {selectedReport.data_insights.avg_content_length?.toFixed(0) || '0'}
                                             </div>
                                         </div>
                                     </div>
 
-                                    {selectedReport.data_insights.insights.length > 0 && (
+                                    {selectedReport.data_insights.insights?.length > 0 && (
                                         <div className="space-y-2">
                                             {selectedReport.data_insights.insights.map((insight, idx) => (
                                                 <div key={idx} className="flex items-start gap-2 p-3 bg-white border rounded-lg">
@@ -169,7 +201,7 @@ export function AnalyticsReportsView({ projectId }: AnalyticsReportsViewProps) {
                                         <span className="text-gray-600">Processing Time:</span>
                                         <span className="font-medium">{selectedReport.metrics.processing_time_ms}ms</span>
                                     </div>
-                                    {Object.entries(selectedReport.metrics.quality_indicators).map(([key, value]) => (
+                                    {selectedReport.metrics.quality_indicators && Object.entries(selectedReport.metrics.quality_indicators).map(([key, value]) => (
                                         <div key={key} className="flex justify-between">
                                             <span className="text-gray-600 capitalize">{key}:</span>
                                             <span className="font-medium">{(value * 100).toFixed(0)}%</span>
@@ -188,14 +220,23 @@ export function AnalyticsReportsView({ projectId }: AnalyticsReportsViewProps) {
         <div className="space-y-4">
             <div className="flex items-center justify-between">
                 <h3 className="text-lg font-semibold text-gray-900">Analytics Reports ({reports.length})</h3>
-                <button
-                    onClick={handleAnalyze}
-                    disabled={analyzeLoading}
-                    className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
-                >
-                    {analyzeLoading ? <TrendingUp className="w-4 h-4 mr-2 animate-spin" /> : <BarChart3 className="w-4 h-4 mr-2" />}
-                    Generate New Insights
-                </button>
+                <div className="flex gap-2">
+                    <button
+                        onClick={() => setViewMode('chat')}
+                        className="inline-flex items-center px-4 py-2 bg-white text-gray-700 border border-gray-300 text-sm font-medium rounded-lg hover:bg-gray-50 transition-colors"
+                    >
+                        <Bot className="w-4 h-4 mr-2" />
+                        Assistant
+                    </button>
+                    <button
+                        onClick={handleAnalyze}
+                        disabled={analyzeLoading}
+                        className="inline-flex items-center px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+                    >
+                        {analyzeLoading ? <TrendingUp className="w-4 h-4 mr-2 animate-spin" /> : <BarChart3 className="w-4 h-4 mr-2" />}
+                        Generate New Insights
+                    </button>
+                </div>
             </div>
 
             <div className="grid gap-4">

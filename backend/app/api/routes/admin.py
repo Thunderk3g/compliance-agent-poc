@@ -30,7 +30,7 @@ from ...schemas.rule_preview import (
     RuleBulkSubmitResponse,
     DraftRule
 )
-from ...services.rule_generator_service import rule_generator_service
+from ...services.agents.compliance.rule_generator import rule_generator_service
 from ..deps import get_db_session, require_super_admin
 
 logger = logging.getLogger(__name__)

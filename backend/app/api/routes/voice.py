@@ -80,12 +80,84 @@ async def analyze_call(request: VoiceAnalysisRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@router.post("/analyze-file")
+async def analyze_audio_file(
+    file: UploadFile = File(...),
+    call_id: Optional[str] = None
+):
+    """
+    Upload and analyze an audio file using Gemini 1.5 Flash.
+    
+    Supports: MP3, WAV, M4A, WebM, OGG
+    Max size: 50MB (recommended for Gemini inline data)
+    
+    Returns the full analysis result including transcript, violations, and risk score.
+    """
+    # Validate file type
+    allowed_types = [
+        "audio/mpeg", "audio/wav", "audio/m4a", "audio/webm", 
+        "audio/mp3", "audio/ogg", "audio/x-wav", "audio/wave"
+    ]
+    
+    # Some browsers may send different content types
+    content_type = file.content_type or "audio/mpeg"
+    if content_type not in allowed_types:
+        # Try to infer from filename
+        filename = file.filename or ""
+        if filename.endswith(".mp3"):
+            content_type = "audio/mpeg"
+        elif filename.endswith(".wav"):
+            content_type = "audio/wav"
+        elif filename.endswith(".m4a"):
+            content_type = "audio/m4a"
+        elif filename.endswith(".webm"):
+            content_type = "audio/webm"
+        elif filename.endswith(".ogg"):
+            content_type = "audio/ogg"
+        else:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Unsupported file type: {file.content_type}. Allowed: MP3, WAV, M4A, WebM, OGG"
+            )
+    
+    try:
+        # Read the file content
+        audio_bytes = await file.read()
+        
+        # Validate file size (50MB limit for Gemini inline)
+        max_size = 50 * 1024 * 1024  # 50MB
+        if len(audio_bytes) > max_size:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File too large. Maximum size is 50MB, got {len(audio_bytes) / 1024 / 1024:.1f}MB"
+            )
+        
+        logger.info(f"Analyzing audio file: {file.filename}, size: {len(audio_bytes)} bytes, type: {content_type}")
+        
+        # Call the voice agent's audio analysis
+        result = await voice_agent.process_audio_file(
+            audio_bytes=audio_bytes,
+            mime_type=content_type,
+            call_id=call_id or str(uuid4())
+        )
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Audio file analysis failed: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @router.post("/upload")
 async def upload_audio(
     file: UploadFile = File(...),
     background_tasks: BackgroundTasks = None
 ):
     """
+    [DEPRECATED] Use /analyze-file instead for direct analysis.
+    
     Upload an audio file for async transcription and analysis.
     
     Supports: MP3, WAV, M4A, WebM
@@ -110,7 +182,7 @@ async def upload_audio(
         "job_id": job_id,
         "status": "queued",
         "message": "Audio file queued for processing. Use /voice/status/{job_id} to check progress.",
-        "note": "Whisper transcription not yet configured - using placeholder"
+        "note": "For immediate analysis, use POST /voice/analyze-file instead."
     }
 
 

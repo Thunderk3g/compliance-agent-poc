@@ -74,7 +74,7 @@ async def resume_compliance_check(
     """
     Resume a paused compliance check with human feedback.
     """
-    from ...services.compliance_engine import compliance_engine
+    from ...services.agents.compliance.engine import compliance_engine
     
     # Format feedback
     feedback_str = f"Decision: {request.decision}. Feedback: {request.feedback or 'None'}"
@@ -153,7 +153,7 @@ async def get_interim_results(
     """
     Get interim (paused) compliance check results for a submission waiting for review.
     """
-    from ...services.compliance_engine import compliance_engine
+    from ...services.agents.compliance.engine import compliance_engine
     
     result = await compliance_engine.get_interim_results(str(submission_id), db)
     
@@ -445,7 +445,7 @@ async def stream_deep_analysis(
             
             # 2. Calculate new scores using ScoringService (standardized logic)
             # Import locally to avoid circular dependencies if any
-            from ...services.scoring_service import ScoringService
+            from ...services.agents.compliance.scoring import ScoringService
             new_scores = ScoringService.calculate_scores(all_violations, db)
             
             # 3. Update the ComplianceCheck record
@@ -654,7 +654,7 @@ async def sync_deep_analysis_results(
             for impact in impacts:
                 # Map RuleImpact to Violation
                 # Use AI to match Deep Analysis violations to existing database rules
-                from ...services.rule_matcher_service import rule_matcher_service
+                from ...services.agents.compliance.rule_matcher import rule_matcher_service
                 
                 violation_description = impact.get("violation_reason", "Violation detected via Deep Analysis")
                 category = impact.get("category", "unknown")
@@ -697,7 +697,7 @@ async def sync_deep_analysis_results(
         # Recalculate sub-scores using ScoringService on the NEW violations
         # This ensures sub-scores are consistent with the new violation set
         # We ignore the returned 'overall' from scoring service in favor of DA average
-        from ...services.scoring_service import scoring_service
+        from ...services.agents.compliance.scoring import scoring_service
         
         try:
             logger.info(f"Calculating scores for {len(new_violations)} violations")

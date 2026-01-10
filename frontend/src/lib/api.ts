@@ -268,10 +268,7 @@ export const api = {
   createProject: (data: { 
     name: string; 
     description: string;
-    agent_voice?: boolean;
-    agent_compliance?: boolean;
-    agent_analytics?: boolean;
-    agent_sales?: boolean;
+    active_agents?: string[];
   }) =>
     apiClient.post("/api/projects/", data),
 
@@ -283,12 +280,14 @@ export const api = {
   updateProject: (projectId: string, data: {
     name?: string;
     description?: string;
-    agent_voice?: boolean;
-    agent_compliance?: boolean;
-    agent_analytics?: boolean;
-    agent_sales?: boolean;
-    agent_config?: any;
+    active_agents?: string[];
   }) => apiClient.put(`/api/projects/${projectId}`, data),
+
+  // Multi-Agent Registry & Toggle
+  getAgentRegistry: () => apiClient.get("/api/projects/agents/registry"),
+
+  toggleProjectAgent: (projectId: string, agentType: string) =>
+    apiClient.post(`/api/projects/${projectId}/agents/${agentType}/toggle`),
 
   deleteProject: (projectId: string) =>
     apiClient.delete(`/api/projects/${projectId}`),
@@ -414,4 +413,15 @@ export const api = {
 
   analyzeAnalytics: (projectId: string) =>
     apiClient.post(`/analytics-reports/${projectId}/analyze`),
+
+  chatAnalytics: (projectId: string, query: string, datasetId?: string, context?: any) =>
+      apiClient.post('/analytics-reports/chat', { project_id: projectId, query, dataset_id: datasetId, context }),
+
+  uploadDataset: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return apiClient.post('/analytics-reports/upload-dataset', formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };

@@ -11,8 +11,8 @@ class Violation(Base):
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     check_id = Column(UUID(as_uuid=True), ForeignKey("compliance_checks.id", ondelete="CASCADE"))
     rule_id = Column(UUID(as_uuid=True), ForeignKey("rules.id"), nullable=True)
-    severity = Column(String(20), nullable=False)  # critical, high, medium, low
-    category = Column(String(20), nullable=False)  # irdai, brand, seo
+    severity = Column(String(50), nullable=False)  # critical, high, medium, low
+    category = Column(String(50), nullable=False)  # irdai, brand, seo
     description = Column(Text, nullable=False)
     location = Column(String(500))
     current_text = Column(Text)

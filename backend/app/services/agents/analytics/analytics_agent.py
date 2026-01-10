@@ -6,10 +6,17 @@ Runs "Reasoning Loops" on structured data from compliance checks, violations, an
 """
 
 import logging
+import json
 from typing import Dict, Any, List, Optional
 from pydantic import BaseModel
 from datetime import datetime, timedelta
 from enum import Enum
+from sqlalchemy.orm import Session
+from sqlalchemy import text, func
+from app.models import ComplianceCheck, Violation, VoiceReport, Policy, Dataset
+from app.services.llm_service import llm_service
+
+from langsmith import traceable
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +54,8 @@ class AnalyticsInsight(BaseModel):
     trends: Dict[str, Any]
     anomalies: List[Anomaly]
     narrative: str
+    chart_config: Optional[Dict[str, Any]] = None
+    key_insights: List[str] = []
     generated_at: datetime
 
 
@@ -58,17 +67,19 @@ class AnalyticsAgent:
     explain anomalies, and provide executive-ready insights.
     
     Reasoning Loop:
-    1. Parse the query intent
+    1. Parse the query intent (LLM)
     2. Plan data fetches
     3. Execute queries
     4. Analyze results
-    5. Generate narrative
+    5. Generate narrative (LLM)
     """
     
-    def __init__(self):
+    def __init__(self, llm_service=llm_service):
         self.db_session = None
-        logger.info("AnalyticsAgent initialized")
+        self.llm = llm_service
+        logger.info("AnalyticsAgent initialized with LLM Service")
     
+    @traceable(name="Analytics Agent: Reasoning Loop", run_type="chain")
     async def reason(
         self, 
         input_data: Dict[str, Any],
@@ -90,7 +101,14 @@ class AnalyticsAgent:
         
         try:
             # Step 1: Parse Intent
-            intent = await self._parse_intent(query)
+            dataset_id = input_data.get("dataset_id")
+            dataset_schema = None
+            if dataset_id and db:
+                 dataset = db.query(Dataset).filter(Dataset.id == dataset_id).first()
+                 if dataset:
+                     dataset_schema = dataset.schema_metadata
+
+            intent = await self._parse_intent(query, dataset_schema)
             reasoning_steps.append(ReasoningStep(
                 step=1,
                 action="parsed_intent",
@@ -98,7 +116,7 @@ class AnalyticsAgent:
             ))
             
             # Step 2: Plan Queries
-            query_plan = await self._plan_queries(intent)
+            query_plan = await self._plan_queries(intent, dataset_id)
             reasoning_steps.append(ReasoningStep(
                 step=2,
                 action="planned_queries",
@@ -130,12 +148,27 @@ class AnalyticsAgent:
             ))
             
             # Step 6: Generate Narrative
-            narrative = await self._generate_narrative(analysis, anomalies)
+            llm_output_str = await self._generate_narrative(analysis, anomalies)
             reasoning_steps.append(ReasoningStep(
                 step=6,
                 action="generated_narrative",
                 result="complete"
             ))
+            
+            # Parse LLM Output
+            import json
+            try:
+                llm_data = json.loads(llm_output_str)
+                narrative_text = llm_data.get("summary", "Analysis complete.")
+                chart_config = {
+                    "type": llm_data.get("chart_type"),
+                    "data": llm_data.get("chart_data")
+                } if llm_data.get("chart_type") else None
+                key_insights = llm_data.get("key_insights", [])
+            except:
+                narrative_text = llm_output_str
+                chart_config = None
+                key_insights = []
             
             result = AnalyticsInsight(
                 query=query,
@@ -143,7 +176,9 @@ class AnalyticsAgent:
                 metrics=analysis.get("metrics", {}),
                 trends=analysis.get("trends", {}),
                 anomalies=anomalies,
-                narrative=narrative,
+                narrative=narrative_text,
+                chart_config=chart_config,
+                key_insights=key_insights,
                 generated_at=datetime.now()
             )
             
@@ -158,260 +193,419 @@ class AnalyticsAgent:
                 "status": "failed"
             }
     
-    async def _parse_intent(self, query: str) -> Dict[str, Any]:
+    @traceable(name="Analytics Agent: Parse Intent", run_type="chain")
+    async def _parse_intent(self, query: str, schema: Optional[Dict] = None) -> Dict[str, Any]:
         """
-        Parse the user's query to determine analysis type.
-        
-        Tailored for Comparative Sales Analysis (AEM Data).
+        Use LLM to understand what the user is asking.
         """
-        query_lower = query.lower()
+        schema_text = ""
+        if schema:
+            schema_text = f"\n        - 'dataset': Uploaded dataset with columns: {json.dumps(schema.get('columns', []))}"
+
+        prompt = f"""
+        You are an expert BI Analyst. Analyze the user's query to determine the intent, focus, and required data.
         
-        intent = {
-            "type": "general",
-            "period": TrendPeriod.MOM.value,
-            "metrics": ["volume", "total_premium", "avg_ticket_size"],
-            "focus": "compliance", # Default focus
-            "filters": {}
-        }
+        Query: "{query}"
         
-        # Detect sales focus
-        if any(word in query_lower for word in ["sales", "product", "performance", "premium", "market"]):
-            intent["focus"] = "sales"
+        Available Data Sources:
+        - "sales": Insurance policy sales, premiums, products, growth.
+        - "compliance": Regulatory compliance scores, violations, check volume.
+        - "voice": Call center audit, risk scores, sentiment analysis.{schema_text}
         
-        # Detect analysis type
-        if "trend" in query_lower or "trending" in query_lower:
-            intent["type"] = "trend_analysis"
-        elif "anomal" in query_lower or "spike" in query_lower:
-            intent["type"] = "anomaly_detection"
-        elif "compare" in query_lower or "comparison" in query_lower or "vs" in query_lower:
-            intent["type"] = "comparison"
-        elif "summary" in query_lower or "report" in query_lower:
-            intent["type"] = "executive_summary"
+        Task:
+        Return a JSON object with:
+        - "focus": One of ["sales", "compliance", "voice", "dataset"] (default to "dataset" if query refers to uploaded columns, else "general")
+        - "type": One of ["trend", "comparison", "summary", "anomaly"]
+        - "period": One of ["week", "month", "quarter", "year"] (infer from context or default to "month")
+        - "metric": (If focus is dataset) The column name to aggregate (e.g. "SalesAmount")
+        - "group_by": (If focus is dataset) List of columns to group by (e.g. ["Region"])
+        - "filters": Key-value pairs of any specific filters mentioned (e.g., product="Term Life")
         
-        # Detect time period
-        if "quarter" in query_lower:
-            intent["period"] = TrendPeriod.QOQ.value
-        elif "year" in query_lower:
-            intent["period"] = TrendPeriod.YOY.value
-        elif "week" in query_lower:
-            intent["period"] = TrendPeriod.WOW.value
-        
-        return intent
-    
-    async def _plan_queries(self, intent: Dict[str, Any]) -> List[Dict[str, Any]]:
+        Only return the JSON.
         """
-        Plan which database queries to execute.
-        """
-        plans = []
         
-        if intent["type"] in ["trend_analysis", "executive_summary", "general"]:
-            plans.append({
-                "table": "compliance_checks",
-                "aggregation": "count_by_period",
-                "period": intent["period"]
-            })
-            plans.append({
-                "table": "violations",
-                "aggregation": "count_by_category",
-                "period": intent["period"]
-            })
-        
-        if intent["type"] == "anomaly_detection":
-            plans.append({
-                "table": "agent_executions",
-                "aggregation": "daily_metrics",
-                "period": "last_30_days"
-            })
-        
-        return plans
-    
-    async def _execute_queries(
-        self, 
-        query_plan: List[Dict[str, Any]], 
-        db: Any
-    ) -> Dict[str, Any]:
-        """
-        Execute planned queries against the database.
-        
-        Includes simulation of AEM Sales Data.
-        """
-        # Simulation of AEM Sales Data for Comparative Analysis
-        aem_sales_data = {
-            "source": "Adobe Experience Manager (AEM)",
-            "last_sync": datetime.now().isoformat(),
-            "products": [
-                {
-                    "name": "Term Life Insurance",
-                    "premium_q3": 4500000,
-                    "premium_q2": 3800000,
-                    "volume_q3": 1200,
-                    "volume_q2": 1050,
-                    "market_share": 0.35
-                },
-                {
-                    "name": "Health Guard Plus",
-                    "premium_q3": 3200000,
-                    "premium_q2": 2900000,
-                    "volume_q3": 950,
-                    "volume_q2": 880,
-                    "market_share": 0.25
-                },
-                {
-                    "name": "ULIP Wealth Creator",
-                    "premium_q3": 5800000,
-                    "premium_q2": 6200000,
-                    "volume_q3": 450,
-                    "volume_q2": 510,
-                    "market_share": 0.40
-                }
-            ]
-        }
-        
-        # Keep existing compliance placeholders for fallback
-        compliance_data = {
-            "compliance_checks": {
-                "current_period": 1245,
-                "previous_period": 1102,
-                "compliance_rate": 87.3,
-                "previous_compliance_rate": 82.1
-            },
-            "violations": {
-                "total": 158,
-                "by_severity": {"critical": 12, "major": 45, "minor": 101},
-                "by_category": {"irdai": 78, "brand": 45, "seo": 35}
-            }
-        }
-        
-        return {
-            "sales_data": aem_sales_data,
-            "compliance_data": compliance_data
-        }
-    
-    async def _analyze_data(
-        self, 
-        raw_data: Dict[str, Any],
-        intent: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        """
-        Analyze the raw data to extract insights.
-        """
-        if intent.get("focus") == "sales":
-            sales_data = raw_data.get("sales_data", {})
-            products = sales_data.get("products", [])
+        try:
+            response = await self.llm.generate_response(prompt, temperature=0.0)
+            # Basic cleaning if LLM wraps in markdown
+            response = response.replace("```json", "").replace("```", "").strip()
             
-            if not products:
-                return {"focus": "sales", "error": "No sales data found"}
-                
-            # Comparative analysis
-            top_performer = max(products, key=lambda x: x["premium_q3"])
-            fastest_grower = max(products, key=lambda x: (x["premium_q3"] - x["premium_q2"]) / x["premium_q2"])
+            intent = json.loads(response)
             
-            metrics = {
-                "total_q3_premium": sum(p["premium_q3"] for p in products),
-                "top_product": top_performer["name"],
-                "growth_star": fastest_grower["name"]
-            }
+            # Fallback defaults if LLM misses keys
+            if "focus" not in intent: intent["focus"] = "compliance"
+            if "type" not in intent: intent["type"] = "summary"
+            if "period" not in intent: intent["period"] = "month"
             
-            trends = {
-                "market_share_distribution": {p["name"]: p["market_share"] for p in products},
-                "growth_rates": {p["name"]: (p["premium_q3"] - p["premium_q2"]) / p["premium_q2"] for p in products}
-            }
-            
-            return {
-                "focus": "sales",
-                "metrics": metrics,
-                "trends": trends,
-                "raw_products": products
-            }
-        else:
-            # Fallback to compliance analysis
-            comp_data = raw_data.get("compliance_data", {}).get("compliance_checks", {})
-            violations = raw_data.get("compliance_data", {}).get("violations", {})
+            return intent
+        except Exception as e:
+            logger.error(f"LLM Intent Parsing failed: {e}")
+            logger.error(f"Raw Response was: {response if 'response' in locals() else 'None'}")
+            # Fallback to heuristic
             return {
                 "focus": "compliance",
-                "metrics": {
-                    "total_submissions": comp_data.get("current_period", 0),
-                    "compliance_rate": comp_data.get("compliance_rate", 0),
-                    "critical_violations": violations.get("by_severity", {}).get("critical", 0),
-                },
-                "trends": {
-                    "compliance_rate_change": comp_data.get("compliance_rate", 0) - comp_data.get("previous_compliance_rate", 0),
-                    "direction": "improving" if (comp_data.get("compliance_rate", 0) - comp_data.get("previous_compliance_rate", 0)) > 0 else "declining"
-                }
+                "type": "summary",
+                "period": "month",
+                "filters": {}
             }
     
-    async def _detect_anomalies(self, raw_data: Dict[str, Any]) -> List[Anomaly]:
+    @traceable(name="Analytics Agent: Plan Queries", run_type="chain")
+    async def _plan_queries(self, intent: Dict[str, Any], dataset_id: str = None) -> Dict[str, Any]:
         """
-        Detect statistical anomalies in the data.
+        Translate intent into data requirements.
+        """
+        required_data = []
+        plan = {}
         
-        Uses simple threshold-based detection.
-        TODO: Implement Z-score/IQR for production.
+        focus = intent.get("focus", "compliance")
+        
+        if focus == "dataset" and dataset_id:
+             required_data.append("dataset")
+             plan["dataset_id"] = dataset_id
+             plan["metric"] = intent.get("metric")
+             plan["group_by"] = intent.get("group_by", [])
+        elif focus == "sales":
+            required_data.append("sales")
+        elif focus == "voice":
+             required_data.append("voice")
+        else:
+             # Default to compliance
+             required_data.append("compliance")
+             
+        # Anomaly detection might need all data
+        if intent.get("type") == "anomaly_detection":
+             if "compliance" not in required_data: required_data.append("compliance")
+        
+        plan["required_data"] = required_data
+        plan["period"] = intent.get("period", "month")
+        
+        return plan
+    
+    @traceable(name="Analytics Agent: Execute Queries", run_type="chain")
+    async def _execute_queries(self, plan: Dict[str, Any], db: Session) -> Dict[str, Any]:
         """
+        Execute multiple planned queries and combine results.
+        """
+        results = {}
+        
+        # Sales Data (Policy Table)
+        if "sales" in plan.get("required_data", []):
+            try:
+                # Query: Sum premium by period and product
+                query = text("""
+                    SELECT 
+                        to_char(issue_date, 'YYYY-MM') as period,
+                        product,
+                        SUM(premium) as total
+                    FROM policies
+                    GROUP BY 1, 2
+                    ORDER BY 1
+                """)
+                rows = db.execute(query).fetchall()
+                results["sales_data"] = [{"period": r[0], "product": r[1], "total": r[2]} for r in rows]
+            except Exception as e:
+                logger.error(f"Sales Query Error: {e}")
+                results["sales_data"] = []
+
+        # Compliance Data (ComplianceCheck Table)
+        if "compliance" in plan.get("required_data", []):
+             try:
+                # Stats
+                checks = db.query(ComplianceCheck.check_date, ComplianceCheck.overall_score).limit(100).all()
+                results["compliance_stats"] = [
+                    {"check_date": c.check_date.isoformat(), "overall_score": float(c.overall_score or 0)} 
+                    for c in checks
+                ]
+                
+                # Violations
+                v_query = text("""
+                    SELECT severity, category, count(*) as count 
+                    FROM violations 
+                    GROUP BY severity, category
+                """)
+                v_rows = db.execute(v_query).fetchall()
+                results["violation_stats"] = [
+                    {"severity": r[0], "category": r[1], "count": r[2]} for r in v_rows
+                ]
+             except Exception as e:
+                 logger.error(f"Compliance Query Error: {e}")
+                 results["compliance_stats"] = []
+                 results["violation_stats"] = []
+
+        # Generic Dataset Data
+        if "dataset_id" in plan:
+            try:
+                dataset_id = plan["dataset_id"]
+                metric = plan.get("metric", "count")
+                group_by = plan.get("group_by", [])
+                
+                # Construct JSONB query
+                # Assumes 'data' column in dataset_rows
+                # Example: SELECT data->>'Region', SUM((data->>'Sales')::float) ...
+                
+                select_clauses = []
+                group_by_clauses = []
+                
+                for idx, col in enumerate(group_by):
+                    select_clauses.append(f"data->>'{col}' as col_{idx}")
+                    group_by_clauses.append(str(idx + 1))
+                
+                if not select_clauses: # If no group by, checking global stats
+                     select_clauses.append("'Global'")
+                
+                # Metric aggregation
+                # Try to cast to float for summation, fallback to count
+                if metric == "count":
+                    select_clauses.append("count(*) as val")
+                else:
+                    # e.g. sum(sales)
+                    # We need to be careful about SQL injection here if taking raw strings, 
+                    # but metric comes from agent plan.
+                    select_clauses.append(f"SUM(COALESCE((data->>'{metric}')::float, 0)) as val")
+                
+                select_str = ", ".join(select_clauses)
+                group_by_str = f"GROUP BY {', '.join(group_by_clauses)}" if group_by_clauses else ""
+                
+                query_str = f"""
+                    SELECT {select_str}
+                    FROM dataset_rows
+                    WHERE dataset_id = :dataset_id
+                    {group_by_str}
+                    LIMIT 100
+                """
+                
+                rows = db.execute(text(query_str), {"dataset_id": dataset_id}).fetchall()
+                
+                # Format results: [{"col_0": "North", "val": 1000}, ...]
+                formatted_rows = []
+                for r in rows:
+                    row_dict = {"value": r[-1]} # Last col is always the value
+                    for i, col_name in enumerate(group_by):
+                        row_dict[col_name] = r[i]
+                    formatted_rows.append(row_dict)
+                    
+                results["generic_data"] = formatted_rows
+                logger.info(f"Executed generic query. Rows: {len(formatted_rows)}")
+            
+            except Exception as e:
+                logger.error(f"Generic Dataset Query Error: {e}")
+                results["generic_data"] = []
+
+        # Voice Data (VoiceReport Table)
+        if "voice" in plan.get("required_data", []):
+            try:
+                 reports = db.query(VoiceReport.risk_score).limit(50).all()
+                 results["voice_stats"] = [
+                     {"risk_score": r.risk_score} for r in reports
+                 ]
+            except Exception as e:
+                 logger.error(f"Voice Query Error: {e}")
+                 results["voice_stats"] = []
+
+        return results
+    
+    async def _analyze_sales_data(self, raw_data: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze Policy sales data."""
+        raw = raw_data.get("sales_data", [])
+        if not raw:
+            return {
+                "focus": "sales",
+                "metrics": {"total_sales": 0, "top_product": "N/A"},
+                "trends": {"sales_trend": "No Data"}
+            }
+
+        # Basic aggregation
+        total_premium = sum(r["total"] for r in raw)
+        
+        # Trend
+        periods = sorted(list(set(r["period"] for r in raw)))
+        latest_period = periods[-1] if periods else None
+        
+        # Product split
+        product_totals = {}
+        for r in raw:
+            p = r["product"]
+            product_totals[p] = product_totals.get(p, 0) + r["total"]
+            
+        top_product = max(product_totals.items(), key=lambda x: x[1])[0] if product_totals else "N/A"
+        
+        return {
+            "focus": "sales",
+            "metrics": {
+                "total_sales": total_premium,
+                "top_product": top_product,
+                "latest_period": latest_period
+            },
+            "trends": {
+                "market_share": product_totals,
+                "periods": periods
+            },
+            "raw_data": raw
+        }
+
+    async def _analyze_compliance_data(self, raw_data: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, Any]:
+        """Analyze ComplianceCheck and Violation data."""
+        checks = raw_data.get("compliance_stats", [])
+        violations = raw_data.get("violation_stats", [])
+        
+        # Compliance Metrics
+        total_checks = len(checks)
+        avg_score = sum(c["overall_score"] for c in checks) / total_checks if total_checks else 0
+        
+        scores_by_date = {}
+        for c in checks:
+            d = c["check_date"].split("T")[0]
+            scores_by_date[d] = c["overall_score"]
+            
+        # Violation Metrics
+        violation_counts = {"critical": 0, "high": 0, "medium": 0, "low": 0}
+        for v in violations:
+            sev = v["severity"].lower()
+            if sev in violation_counts:
+                violation_counts[sev] += v["count"]
+                
+        return {
+            "focus": "compliance",
+            "metrics": {
+                "total_checks": total_checks,
+                "avg_compliance_score": round(avg_score, 2),
+                "critical_violations": violation_counts["critical"]
+            },
+            "trends": {
+                "score_history": scores_by_date,
+                "violation_breakdown": violation_counts
+            }
+        }
+
+    async def _analyze_voice_data(self, raw_data: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, Any]:
+         """Analyze VoiceReport data."""
+         reports = raw_data.get("voice_stats", [])
+         
+         avg_risk = 0
+         if reports:
+             avg_risk = sum(r["risk_score"] for r in reports if r["risk_score"] is not None) / len(reports)
+             
+         return {
+             "focus": "voice",
+             "metrics": {
+                 "total_calls": len(reports),
+                 "avg_risk_score": round(avg_risk, 2)
+             },
+             "trends": {}
+         }
+
+    @traceable(name="Analytics Agent: Analyze Generic Dataset", run_type="chain")
+    async def _analyze_generic_data(self, raw_data: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Generic analyzer for dataset_rows (JSONB).
+        """
+        data = raw_data.get("generic_data", [])
+        return {
+            "focus": "dataset",
+            "metrics": {
+                "row_count": len(data),
+                "total_value": sum(r["value"] for r in data) if data else 0
+            },
+            "trends": {
+                "data_points": data
+            },
+            "raw_data": data
+        }
+
+    @traceable(name="Analytics Agent: Analyze Data", run_type="chain")
+    async def _analyze_data(self, raw_data: Dict[str, Any], intent: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Perform arithmetic and statistical analysis on raw results.
+        """
+        focus = intent.get("focus", "general")
+        
+        if focus == "dataset" or (raw_data.get("generic_data") is not None and len(raw_data.get("generic_data", [])) > 0):
+             return await self._analyze_generic_data(raw_data, intent)
+        elif focus == "sales":
+            return await self._analyze_sales_data(raw_data, intent)
+        elif focus == "voice":
+            return await self._analyze_voice_data(raw_data, intent)
+        else:
+            return await self._analyze_compliance_data(raw_data, intent)
+    
+    async def _detect_anomalies(self, raw_data: Dict[str, Any]) -> List[Anomaly]:
+        """Simple anomaly detection on real data."""
         anomalies = []
         
-        violations = raw_data.get("violations", {})
-        critical = violations.get("by_severity", {}).get("critical", 0)
+        # Check for Critical Violation Spikes
+        v_stats = raw_data.get("violation_stats", [])
+        critical_count = sum(v["count"] for v in v_stats if v["severity"] == "critical")
         
-        # Flag if critical violations exceed expected threshold
-        expected_critical = 5  # Baseline
-        if critical > expected_critical * 2:
-            anomalies.append(Anomaly(
+        if critical_count > 5:
+             anomalies.append(Anomaly(
                 metric="critical_violations",
                 period="current",
-                value=critical,
-                expected=expected_critical,
-                deviation=2.5,
-                probable_cause="Possible new IRDAI circular or rule changes"
+                value=critical_count,
+                expected=2,
+                deviation=critical_count/2.0,
+                probable_cause="High number of critical violations detected"
             ))
-        
+            
         return anomalies
     
-    async def _generate_narrative(
-        self, 
-        analysis: Dict[str, Any],
-        anomalies: List[Anomaly]
-    ) -> str:
+    @traceable(name="Analytics Agent: Generate Narrative", run_type="chain")
+    async def _generate_narrative(self, analysis: Dict[str, Any], anomalies: List[Anomaly], intent: Dict[str, Any] = {}) -> str:
         """
-        Generate executive-ready narrative summary.
+        Generate executive-ready narrative and visualization config using LLM.
         """
-        if analysis.get("focus") == "sales":
-            metrics = analysis.get("metrics", {})
-            trends = analysis.get("trends", {})
+        focus = analysis.get("focus", "general")
+        metrics = analysis.get("metrics", {})
+        trends = analysis.get("trends", {})
+        raw_data = analysis.get("raw_data", [])
+        
+        # Construct data context for LLM
+        data_summary = f"Focus: {focus}\nMetrics: {json.dumps(metrics)}\nTrends: {json.dumps(trends)}\nIntent: {json.dumps(intent)}"
+        if anomalies:
+            data_summary += f"\nAnomalies: {[a.dict() for a in anomalies]}"
             
-            narrative = f"### Comparative Sales Analysis (Source: AEM Data)\n\n"
-            narrative += f"• **Total Premium (Q3):** ₹{metrics['total_q3_premium']:,.0f} showing a healthy quarter-over-quarter trajectory.\n"
-            narrative += f"• **Top Performer:** {metrics['top_product']} remains the market leader with a share of {(trends['market_share_distribution'][metrics['top_product']]*100):.1f}%.\n"
-            narrative += f"• **Growth Insight:** {metrics['growth_star']} is the fastest-growing product, increasing by {(trends['growth_rates'][metrics['growth_star']]*100):.1f}% compared to Q2.\n"
-            narrative += f"• **Notable Pattern:** While most products show growth, ULIP Wealth Creator saw a decline in volume, suggesting a shift in customer preference towards lower-risk term plans.\n"
+        prompt = f"""
+        You are a Chief Data Officer. Based on the following data analysis, provide an executive summary and recommend a visualization.
+        
+        Data Context:
+        {data_summary}
+        
+        Task:
+        1. Write a professional, concise executive summary (markdown format). Highlight key wins, risks, and trends.
+           If the focus is 'dataset', speak specifically about the uploaded data trends.
+        2. Recommend the single best chart to visualize this data (bar, line, area, or pie).
+        3. Provide the chart configuration for ApexCharts (series and xaxis categories).
+           For 'dataset' focus, use the trends data provided to build the series.
+        
+        Output Format:
+        Return ONLY a raw JSON object (no markdown formatting) with this structure:
+        {{
+            "summary": "Your executive summary here...",
+            "chart_type": "bar",  // or line, area, pie
+            "chart_data": {{
+                "series": [ {{ "name": "Series Name", "data": [10, 20, 30] }} ],
+                "xaxis": {{ "categories": ["Jan", "Feb", "Mar"] }}
+            }},
+            "key_insights": ["Insight 1", "Insight 2"]
+        }}
+        """
+        
+        try:
+            response = await self.llm.generate_response(prompt, temperature=0.2)
+            # Clean response
+            response = response.replace("```json", "").replace("```", "").strip()
             
-            if anomalies:
-                narrative += f"\n**Anomalies Detected:** {anomalies[0].metric} fluctuated significantly in the last period."
-                
-            return narrative.strip()
-        else:
-            # Placeholder narrative generation for compliance
-            metrics = analysis.get("metrics", {})
-            trends = analysis.get("trends", {})
+            # Verify it's valid JSON
+            json.loads(response)
+            return response
             
-            direction = trends.get("direction", "stable")
-            change = abs(trends.get("compliance_rate_change", 0))
-            
-            narrative = f"Compliance {direction} by {change:.1f}% this period. "
-            narrative += f"Processed {metrics.get('total_submissions', 0)} submissions "
-            narrative += f"with {metrics.get('critical_violations', 0)} critical violations. "
-            
-            if anomalies:
-                narrative += f"Alert: {len(anomalies)} anomaly detected - {anomalies[0].probable_cause}. "
-            
-            # Recommendation
-            if direction == "declining":
-                narrative += "Recommend: Review recent rule changes and team training."
-            elif metrics.get("critical_violations", 0) > 10:
-                narrative += "Recommend: Prioritize critical violation resolution."
-            else:
-                narrative += "Recommend: Continue current practices."
-            
-            return narrative
+        except Exception as e:
+            logger.error(f"LLM Narrative Generation failed: {e}")
+            # Fallback basics
+            return json.dumps({
+                "summary": f"{focus.capitalize()} analysis completed. Metrics: {metrics}",
+                "chart_type": "bar",
+                "chart_data": {"series": [], "xaxis": {"categories": []}},
+                "key_insights": []
+            })
 
     # Connector Methods (Power BI-style API)
     

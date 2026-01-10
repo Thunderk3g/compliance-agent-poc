@@ -9,7 +9,7 @@ import uuid
 from ...database import get_db
 from ..deps import get_current_user_id
 from ...services.project_service import ProjectService
-from ...services.rule_generator_service import rule_generator_service
+from ...services.agents.compliance.rule_generator import rule_generator_service
 from ...models.guideline import Guideline
 from ...models.rule import Rule
 from ...config import settings
@@ -86,7 +86,7 @@ async def upload_guideline(
         "errors": result["errors"]
     }
 
-from ...schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, GuidelineResponse, ImproveRulesRequest
+from ...schemas.project import ProjectCreate, ProjectUpdate, ProjectResponse, GuidelineResponse, ImproveRulesRequest, AgentRegistryResponse
 
 @router.put("/{project_id}", response_model=ProjectResponse)
 def update_project(
@@ -106,13 +106,61 @@ def update_project(
         project_id,
         name=project_update.name,
         description=project_update.description,
-        agent_voice=project_update.agent_voice,
-        agent_compliance=project_update.agent_compliance,
-        agent_analytics=project_update.agent_analytics,
-        agent_sales=project_update.agent_sales,
-        agent_config=project_update.agent_config
+        active_agents=project_update.active_agents
     )
     return updated_project
+
+@router.get("/agents/registry", response_model=List[AgentRegistryResponse])
+def get_agent_registry(
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """List all available agents in the system registry."""
+    from ...models.agent_registry import AgentRegistry
+    return db.query(AgentRegistry).filter(AgentRegistry.is_active == True).all()
+
+@router.post("/{project_id}/agents/{agent_type}/toggle")
+def toggle_project_agent(
+    project_id: UUID,
+    agent_type: str,
+    user_id: UUID = Depends(get_current_user_id),
+    db: Session = Depends(get_db)
+):
+    """Toggle a specific agent for a project."""
+    service = ProjectService(db)
+    project = service.get_project(project_id)
+    if not project or project.created_by != user_id:
+        raise HTTPException(status_code=404, detail="Project not found")
+    
+    from ...models.project_agent import ProjectAgent
+    from ...models.agent_registry import AgentRegistry
+    
+    # Verify agent exists
+    agent_exists = db.query(AgentRegistry).filter(AgentRegistry.agent_type == agent_type).first()
+    if not agent_exists:
+        raise HTTPException(status_code=400, detail=f"Agent '{agent_type}' not found in registry")
+        
+    pa = db.query(ProjectAgent).filter(
+        ProjectAgent.project_id == project_id,
+        ProjectAgent.agent_type == agent_type
+    ).first()
+    
+    if pa:
+        # Toggle existing
+        pa.enabled = not pa.enabled
+        new_state = pa.enabled
+    else:
+        # Create as enabled
+        pa = ProjectAgent(
+            project_id=project_id,
+            agent_type=agent_type,
+            enabled=True
+        )
+        db.add(pa)
+        new_state = True
+    
+    db.commit()
+    return {"success": True, "agent_type": agent_type, "enabled": new_state}
 
 @router.post("/", response_model=ProjectResponse)
 def create_project(
@@ -125,11 +173,7 @@ def create_project(
         user_id, 
         project.name, 
         project.description,
-        agent_voice=project.agent_voice,
-        agent_compliance=project.agent_compliance,
-        agent_analytics=project.agent_analytics,
-        agent_sales=project.agent_sales,
-        agent_config=project.agent_config
+        active_agents=project.active_agents
     )
 
 @router.get("/", response_model=List[ProjectResponse])

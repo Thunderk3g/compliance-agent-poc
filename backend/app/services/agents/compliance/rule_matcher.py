@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 import logging
 import json
 import uuid
-from ..models.rule import Rule
-from .llm_service import llm_service
+from app.models.rule import Rule
+from app.services.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 

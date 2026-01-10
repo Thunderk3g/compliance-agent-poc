@@ -26,3 +26,4 @@ class Project(Base):
     guidelines = relationship("Guideline", back_populates="project", cascade="all, delete-orphan")
     rules = relationship("Rule", back_populates="project", cascade="all, delete-orphan")
     submissions = relationship("Submission", back_populates="project", cascade="all, delete-orphan")
+    agents = relationship("ProjectAgent", back_populates="project", cascade="all, delete-orphan")

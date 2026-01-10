@@ -15,7 +15,7 @@ import logging
 from typing import List, Dict, Any, Optional
 import httpx
 from ..config import settings
-from .compliance_knowledge_base import get_fallback_knowledge, search_knowledge_base
+from .agents.compliance.knowledge_base import get_fallback_knowledge, search_knowledge_base
 
 logger = logging.getLogger(__name__)
 

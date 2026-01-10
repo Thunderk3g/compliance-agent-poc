@@ -283,6 +283,22 @@ export interface ChunkListResponse {
 }
 
 // Phase 1: Project System Types
+export interface AgentRegistryResponse {
+  agent_type: string;
+  display_name: string;
+  description: string;
+  icon_url?: string;
+  is_active: boolean;
+  config_schema?: any;
+}
+
+export interface ProjectAgentResponse {
+  agent_type: string;
+  enabled: boolean;
+  config: any;
+  agent_info?: AgentRegistryResponse;
+}
+
 export interface Project {
   id: string;
   name: string;
@@ -290,11 +306,7 @@ export interface Project {
   created_by: string;
   created_at?: string;
   // Agent Configuration
-  agent_voice?: boolean;
-  agent_compliance?: boolean;
-  agent_analytics?: boolean;
-  agent_sales?: boolean;
-  agent_config?: any;
+  agents: ProjectAgentResponse[];
 }
 
 export interface Guideline {

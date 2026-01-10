@@ -1,6 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Plus, Loader2 } from 'lucide-react';
 import { api } from '../../lib/api';
+import { AgentRegistryResponse } from '../../lib/types';
 
 interface CreateProjectDialogProps {
     isOpen: boolean;
@@ -11,11 +12,39 @@ interface CreateProjectDialogProps {
 export const CreateProjectDialog: React.FC<CreateProjectDialogProps> = ({ isOpen, onClose, onProjectCreated }) => {
     const [name, setName] = useState('');
     const [description, setDescription] = useState('');
-    const [agentVoice, setAgentVoice] = useState(false);
-    const [agentAnalytics, setAgentAnalytics] = useState(false);
-    const [agentCompliance, setAgentCompliance] = useState(true);
+    const [availableAgents, setAvailableAgents] = useState<AgentRegistryResponse[]>([]);
+    const [selectedAgents, setSelectedAgents] = useState<string[]>(['compliance']); // Default to compliance
     const [loading, setLoading] = useState(false);
+    const [loadingAgents, setLoadingAgents] = useState(false);
     const [error, setError] = useState<string | null>(null);
+
+    // Fetch available agents when dialog opens
+    useEffect(() => {
+        if (isOpen) {
+            fetchAvailableAgents();
+        }
+    }, [isOpen]);
+
+    const fetchAvailableAgents = async () => {
+        setLoadingAgents(true);
+        try {
+            const response = await api.getAgentRegistry();
+            setAvailableAgents(response.data);
+        } catch (err) {
+            console.error('Failed to fetch agents:', err);
+            setError('Failed to load available agents');
+        } finally {
+            setLoadingAgents(false);
+        }
+    };
+
+    const toggleAgent = (agentType: string) => {
+        setSelectedAgents(prev => 
+            prev.includes(agentType) 
+                ? prev.filter(a => a !== agentType)
+                : [...prev, agentType]
+        );
+    };
 
     if (!isOpen) return null;
 
@@ -30,18 +59,14 @@ export const CreateProjectDialog: React.FC<CreateProjectDialogProps> = ({ isOpen
             await api.createProject({ 
                 name, 
                 description,
-                agent_voice: agentVoice,
-                agent_analytics: agentAnalytics,
-                agent_compliance: agentCompliance
+                active_agents: selectedAgents
             });
             onProjectCreated();
             onClose();
             // Reset form
             setName('');
             setDescription('');
-            setAgentVoice(false);
-            setAgentAnalytics(false);
-            setAgentCompliance(true);
+            setSelectedAgents(['compliance']);
         } catch (err: any) {
             console.error("Failed to create project:", err);
             setError("Failed to create project. Please try again.");
@@ -101,46 +126,31 @@ export const CreateProjectDialog: React.FC<CreateProjectDialogProps> = ({ isOpen
                         <label className="block text-sm font-medium text-gray-700 mb-2">
                             Select Agents
                         </label>
-                        <div className="space-y-3">
-                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                                <input
-                                    type="checkbox"
-                                    checked={agentCompliance}
-                                    onChange={(e) => setAgentCompliance(e.target.checked)}
-                                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                />
-                                <div>
-                                    <div className="text-sm font-semibold text-gray-900">Regulatory Compliance Agent</div>
-                                    <div className="text-xs text-gray-500">Check content against IRDAI/Brand/SEO rules</div>
-                                </div>
-                            </label>
-
-                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                                <input
-                                    type="checkbox"
-                                    checked={agentVoice}
-                                    onChange={(e) => setAgentVoice(e.target.checked)}
-                                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                />
-                                <div>
-                                    <div className="text-sm font-semibold text-gray-900">Voice Audit Agent</div>
-                                    <div className="text-xs text-gray-500">Analyze call transcripts for tone and sentiment</div>
-                                </div>
-                            </label>
-
-                            <label className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                                <input
-                                    type="checkbox"
-                                    checked={agentAnalytics}
-                                    onChange={(e) => setAgentAnalytics(e.target.checked)}
-                                    className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
-                                />
-                                <div>
-                                    <div className="text-sm font-semibold text-gray-900">BI Analytics Agent</div>
-                                    <div className="text-xs text-gray-500">Generate executive summaries and data insights</div>
-                                </div>
-                            </label>
-                        </div>
+                        {loadingAgents ? (
+                            <div className="flex items-center justify-center py-8">
+                                <Loader2 className="w-6 h-6 animate-spin text-blue-600" />
+                            </div>
+                        ) : (
+                            <div className="space-y-3">
+                                {availableAgents.filter(agent => agent.is_active).map((agent) => (
+                                    <label 
+                                        key={agent.agent_type}
+                                        className="flex items-center gap-3 p-3 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors"
+                                    >
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedAgents.includes(agent.agent_type)}
+                                            onChange={() => toggleAgent(agent.agent_type)}
+                                            className="w-4 h-4 text-blue-600 rounded border-gray-300 focus:ring-blue-500"
+                                        />
+                                        <div>
+                                            <div className="text-sm font-semibold text-gray-900">{agent.display_name}</div>
+                                            <div className="text-xs text-gray-500">{agent.description}</div>
+                                        </div>
+                                    </label>
+                                ))}
+                            </div>
+                        )}
                     </div>
 
                     <div className="flex justify-end gap-3 mt-6">

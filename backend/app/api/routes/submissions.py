@@ -7,7 +7,7 @@ import os
 from ...database import get_db
 from ...models.submission import Submission
 from ...services.content_parser import content_parser
-from ...services.compliance_engine import compliance_engine
+from ...services.agents.compliance.engine import compliance_engine
 from ...schemas.submission import (
     SubmissionCreate,
     SubmissionResponse,
