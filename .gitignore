@@ -1,6 +1,7 @@
 # Environment
 .env
 .env.local
+.env.vercel
 service-account.json
 backend/service-account.json
 
